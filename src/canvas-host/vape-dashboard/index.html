@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#050505">
+    <title>Troy Vape — Painel de Vendas</title>
+    <link rel="stylesheet" href="dashboard.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-effects">
+        <div class="glow glow-1"></div>
+        <div class="glow glow-2"></div>
+    </div>
+
+    <header>
+        <div class="header-left">
+            <div class="logo">
+                <span class="gold-text">TROY</span> VAPE
+            </div>
+            <span class="header-badge">Painel de Vendas</span>
+        </div>
+        <div class="header-right">
+            <div id="connection-status" class="conn-status offline">
+                <span class="conn-dot"></span>
+                <span class="conn-label">Offline</span>
+            </div>
+            <div class="date-display" id="current-date"></div>
+        </div>
+    </header>
+
+    <main>
+        <!-- KPI Cards -->
+        <section class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-icon">💰</div>
+                <div class="kpi-data">
+                    <span class="kpi-value" id="kpi-revenue">R$ 0,00</span>
+                    <span class="kpi-label">Faturamento Hoje</span>
+                </div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon">📦</div>
+                <div class="kpi-data">
+                    <span class="kpi-value" id="kpi-pending">0</span>
+                    <span class="kpi-label">Pedidos Pendentes</span>
+                </div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon">✅</div>
+                <div class="kpi-data">
+                    <span class="kpi-value" id="kpi-completed">0</span>
+                    <span class="kpi-label">Concluídos Hoje</span>
+                </div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon">🎯</div>
+                <div class="kpi-data">
+                    <span class="kpi-value" id="kpi-ticket">R$ 0,00</span>
+                    <span class="kpi-label">Ticket Médio</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Content Grid -->
+        <div class="content-grid">
+            <!-- Orders Table -->
+            <section class="panel orders-panel">
+                <div class="panel-header">
+                    <h2 class="playfair">Pedidos</h2>
+                    <div class="panel-actions">
+                        <select id="filter-status" class="filter-select">
+                            <option value="all">Todos</option>
+                            <option value="novo">Novo</option>
+                            <option value="pago">Pago</option>
+                            <option value="separado">Separado</option>
+                            <option value="enviado">Enviado</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table id="orders-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Cliente</th>
+                                <th>Produtos</th>
+                                <th>Total</th>
+                                <th>Status</th>
+                                <th>Hora</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-body">
+                            <tr class="empty-row">
+                                <td colspan="6">Nenhum pedido registrado ainda.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Activity Feed -->
+            <section class="panel feed-panel">
+                <div class="panel-header">
+                    <h2 class="playfair">Feed de Atividades</h2>
+                    <button id="btn-clear-feed" class="clear-btn">Limpar</button>
+                </div>
+                <div id="activity-feed" class="activity-feed">
+                    <div class="feed-empty">Aguardando eventos...</div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Conversion Metrics -->
+        <section class="panel metrics-panel">
+            <div class="panel-header">
+                <h2 class="playfair">Métricas de Conversão</h2>
+            </div>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <span class="metric-label">Conversas Iniciadas</span>
+                    <span class="metric-value" id="metric-conversations">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Catálogos Abertos</span>
+                    <span class="metric-value" id="metric-catalogs">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Checkouts Enviados</span>
+                    <span class="metric-value" id="metric-checkouts">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Pagamentos Confirmados</span>
+                    <span class="metric-value" id="metric-payments">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Taxa de Conversão</span>
+                    <span class="metric-value gold" id="metric-conversion">0%</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Panel -->
+        <section class="panel config-panel">
+            <div class="panel-header">
+                <h2 class="playfair">⚙️ Configurações</h2>
+                <span id="config-status" class="config-saved-badge" style="display:none;">✓ Salvo</span>
+            </div>
+            <div class="config-grid">
+                <div class="config-field">
+                    <label for="cfg-whatsapp">📱 WhatsApp do Escritório</label>
+                    <input type="tel" id="cfg-whatsapp" placeholder="5511999999999" autocomplete="off">
+                    <span class="config-hint">Número completo com DDI+DDD (ex: 5511987654321)</span>
+                </div>
+                <div class="config-field">
+                    <label for="cfg-pix">🔑 Chave Pix da Loja</label>
+                    <input type="text" id="cfg-pix" placeholder="email@loja.com ou CPF/CNPJ" autocomplete="off">
+                    <span class="config-hint">Email, CPF, CNPJ ou chave aleatória</span>
+                </div>
+                <div class="config-field">
+                    <label for="cfg-store-name">🏪 Nome da Loja</label>
+                    <input type="text" id="cfg-store-name" placeholder="Troy Vape" autocomplete="off">
+                    <span class="config-hint">Usado no cabeçalho do catálogo e nas mensagens</span>
+                </div>
+            </div>
+            <div class="config-actions">
+                <button id="btn-save-config" class="gold-btn">Salvar Configurações</button>
+                <button id="btn-test-forward" class="test-btn">📤 Testar Encaminhamento</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="dashboard.js"></script>
+</body>
+
+</html>

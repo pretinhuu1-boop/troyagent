@@ -1,0 +1,9 @@
+{
+  "canvasHost": {
+    "root": "./src/canvas-host"
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local"
+  }
+}
