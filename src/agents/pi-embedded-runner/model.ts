@@ -199,6 +199,28 @@ export function resolveModel(
     if (anthropicForwardCompat) {
       return { model: anthropicForwardCompat, authStorage, modelRegistry };
     }
+
+    if (normalizeProviderId(provider) === "openrouter") {
+      // Only enable reasoning for models known to support it (e.g. DeepSeek R1, QwQ)
+      const lowerModelId = modelId.toLowerCase();
+      const hasReasoning =
+        lowerModelId.includes("deepseek-r1") ||
+        lowerModelId.includes("qwq") ||
+        lowerModelId.includes("reasoning");
+      const fallbackModel: Model<Api> = normalizeModelCompat({
+        id: modelId,
+        name: modelId,
+        api: "openai-completions",
+        provider: "openrouter",
+        baseUrl: "https://openrouter.ai/api/v1",
+        reasoning: hasReasoning,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128000,
+        maxTokens: 4096,
+      } as Model<Api>);
+      return { model: fallbackModel, authStorage, modelRegistry };
+    }
     const providerCfg = providers[provider];
     if (providerCfg || modelId.startsWith("mock-")) {
       const fallbackModel: Model<Api> = normalizeModelCompat({

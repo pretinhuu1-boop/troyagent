@@ -282,6 +282,37 @@ export async function handleOpenAiHttpRequest(
       return;
     }
 
+    if (evt.stream === "reasoning") {
+      const text = evt.data?.text;
+      if (!text) return;
+
+      if (!wroteRole) {
+        wroteRole = true;
+        writeSse(res, {
+          id: runId,
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [{ index: 0, delta: { role: "assistant" } }],
+        });
+      }
+
+      writeSse(res, {
+        id: runId,
+        object: "chat.completion.chunk",
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning: text },
+            finish_reason: null,
+          },
+        ],
+      });
+      return;
+    }
+
     if (evt.stream === "assistant") {
       const delta = evt.data?.delta;
       const text = evt.data?.text;

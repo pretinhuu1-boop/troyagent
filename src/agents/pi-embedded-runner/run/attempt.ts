@@ -38,6 +38,7 @@ import {
   validateGeminiTurns,
 } from "../../pi-embedded-helpers.js";
 import { subscribeEmbeddedPiSession } from "../../pi-embedded-subscribe.js";
+import { createOpenRouterReasoningLogger } from "../../openrouter-reasoning.js";
 import {
   ensurePiCompactionReserveTokens,
   resolveCompactionReserveTokensFloor,
@@ -533,6 +534,15 @@ export async function runEmbeddedAttempt(
       }
       if (anthropicPayloadLogger) {
         activeSession.agent.streamFn = anthropicPayloadLogger.wrapStreamFn(
+          activeSession.agent.streamFn,
+        );
+      }
+
+      const openRouterReasoning = createOpenRouterReasoningLogger({
+        onReasoningStream: params.onReasoningStream,
+      });
+      if (openRouterReasoning) {
+        activeSession.agent.streamFn = openRouterReasoning.wrapStreamFn(
           activeSession.agent.streamFn,
         );
       }
