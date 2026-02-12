@@ -13,6 +13,35 @@ let cart = [];
 let activeCategory = 'all';
 let searchQuery = '';
 
+// --- Stock Integration ---
+function getStockData() {
+    try {
+        return JSON.parse(localStorage.getItem('troy_vape_stock') || '{}');
+    } catch { return {}; }
+}
+
+function hasStockData() {
+    const stock = getStockData();
+    return Object.keys(stock).length > 0;
+}
+
+function getAvailableFlavors(product) {
+    const stock = getStockData();
+    const s = stock[product.sku];
+    // If no stock data or no flavor filter, show all flavors
+    if (!s || !s.flavors || s.flavors.length === 0) return product.flavors || [];
+    // Filter to only flavors in stock
+    return (product.flavors || []).filter(f => s.flavors.includes(f));
+}
+
+// Cross-tab sync: re-render when stock changes in another tab/canvas
+window.addEventListener('storage', (e) => {
+    if (e.key === 'troy_vape_stock') {
+        buildCategoryFilter();
+        renderProducts();
+    }
+});
+
 const INLINE_PRODUCTS = [
   {"id":"ignite-tadalafil","sku":"IGNITE-TADALAFIL","name":"Ignite Tadalafil Spray 20mg","description":"Spray de performance Ignite. 120 doses.","price":100.10,"image":"https://ignitesaude.com/cdn/shop/files/teste_img_2_spray.jpg?v=1758025041","category":"Ignite","flavors":["Grape","Cherry","Menthol"]},
   {"id":"ignite-v-nano","sku":"IGNITE-V-NANO","name":"Ignite V Nano 1.000 Puffs","description":"Compacto e potente.","price":22.95,"image":"images/ignite-v-nano.png","category":"Ignite","flavors":["Passion Sour Kiwi"]},
@@ -103,10 +132,19 @@ function initSearch() {
 
 // --- Product Rendering ---
 function getFilteredProducts() {
+    const stock = getStockData();
+    const stockActive = hasStockData();
+
     return PRODUCTS.filter(p => {
+        // Stock filter: if stock data exists, hide unavailable products
+        if (stockActive) {
+            const s = stock[p.sku];
+            if (s && (s.available === false || s.qty === 0)) return false;
+        }
+
         const matchCat = activeCategory === 'all' || p.category === activeCategory;
-        const matchSearch = !searchQuery || 
-            p.name.toLowerCase().includes(searchQuery) || 
+        const matchSearch = !searchQuery ||
+            p.name.toLowerCase().includes(searchQuery) ||
             p.category.toLowerCase().includes(searchQuery) ||
             (p.flavors && p.flavors.some(f => f.toLowerCase().includes(searchQuery)));
         return matchCat && matchSearch;
@@ -123,9 +161,10 @@ function renderProducts() {
     }
 
     grid.innerHTML = filtered.map(p => {
-        const flavorOptions = p.flavors && p.flavors.length > 0
+        const availFlavors = getAvailableFlavors(p);
+        const flavorOptions = availFlavors.length > 0
             ? `<select id="flavor-${p.id}" class="flavor-select">
-                ${p.flavors.map(f => `<option value="${f}">${f}</option>`).join('')}
+                ${availFlavors.map(f => `<option value="${f}">${f}</option>`).join('')}
                </select>`
             : '';
 

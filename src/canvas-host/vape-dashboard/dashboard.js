@@ -11,6 +11,7 @@ const STORAGE_KEY = 'troy_vape_orders';
 const FEED_KEY = 'troy_vape_feed';
 const METRICS_KEY = 'troy_vape_metrics';
 const CONFIG_KEY = 'troy_vape_config';
+const STOCK_KEY = 'troy_vape_stock';
 
 // --- State ---
 let orders = [];
@@ -21,6 +22,8 @@ let metrics = {
     checkouts: 0,
     payments: 0
 };
+// Stock state: { [sku]: { available: bool, qty: number, flavors: string[], lastUpdated: number } }
+let stock = {};
 let config = {
     whatsapp: '',
     pix: '',
@@ -55,6 +58,19 @@ function saveState() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
     localStorage.setItem(FEED_KEY, JSON.stringify(feed));
     localStorage.setItem(METRICS_KEY, JSON.stringify(metrics));
+}
+
+function loadStock() {
+    try {
+        const saved = localStorage.getItem(STOCK_KEY);
+        if (saved) stock = JSON.parse(saved);
+    } catch (e) {
+        console.warn('Erro ao carregar estoque:', e);
+    }
+}
+
+function saveStock() {
+    localStorage.setItem(STOCK_KEY, JSON.stringify(stock));
 }
 
 // --- Config Management ---
@@ -352,6 +368,61 @@ window.troyDashboard = {
             pix: config.pix,
             message: msg
         };
+    },
+
+    // --- Stock Management ---
+
+    updateStock(stockList) {
+        if (!Array.isArray(stockList)) {
+            return { updated: 0, errors: ['stockList must be an array'] };
+        }
+        const errors = [];
+        let updated = 0;
+        for (const item of stockList) {
+            if (!item.sku) {
+                errors.push('Item missing sku');
+                continue;
+            }
+            stock[item.sku] = {
+                available: item.available !== false,
+                qty: typeof item.qty === 'number' ? item.qty : 0,
+                flavors: Array.isArray(item.flavors) ? item.flavors : [],
+                lastUpdated: Date.now()
+            };
+            updated++;
+        }
+        saveStock();
+        if (updated > 0) {
+            addFeedEvent('system', `📦 Estoque atualizado: ${updated} produto(s)`);
+        }
+        return { updated, errors };
+    },
+
+    getStock(sku) {
+        return stock[sku] || { available: false, qty: 0, flavors: [], lastUpdated: null };
+    },
+
+    getAvailableProducts() {
+        return Object.entries(stock)
+            .filter(([, data]) => data.available && data.qty > 0)
+            .map(([sku, data]) => ({ sku, qty: data.qty, flavors: data.flavors }));
+    },
+
+    getAllStock() {
+        return { ...stock };
+    },
+
+    setUnavailable(sku) {
+        if (!stock[sku]) {
+            stock[sku] = { available: false, qty: 0, flavors: [], lastUpdated: Date.now() };
+        } else {
+            stock[sku].available = false;
+            stock[sku].qty = 0;
+            stock[sku].lastUpdated = Date.now();
+        }
+        saveStock();
+        addFeedEvent('system', `❌ Produto ${sku} marcado como esgotado`);
+        return true;
     }
 };
 
@@ -366,6 +437,7 @@ function init() {
 
     loadConfig();
     loadState();
+    loadStock();
     updateKPIs();
     renderOrders();
     renderFeed();
