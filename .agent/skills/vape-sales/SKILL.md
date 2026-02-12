@@ -8,7 +8,7 @@ description: Procedimentos de vendas, cálculos de markup e notificações para 
 Esta skill orienta o agente no processo de venda de vaporizadores da Troy Vape.
 
 ## 💰 Preços
-Os preços em `src/config/vape-products.json` são **preços finais** — exiba diretamente, sem cálculos adicionais.
+Os preços em `src/canvas-host/vape-catalog/vape-products.json` são **preços finais** — exiba diretamente, sem cálculos adicionais.
 
 ## 🛒 Fluxo de Checkout
 Ao receber a ação `checkout_initiated` do Canvas:
