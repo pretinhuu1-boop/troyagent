@@ -1,35 +1,31 @@
 # Caddyfile for Troy Vape — ecossistematroy.com
-# Caddy automatically provisions Let's Encrypt HTTPS certificates
-#
-# Auth strategy: cookie-based session gate.
-# /login serves the login page, /api/auth/verify checks credentials.
-# All other routes require a troy_session cookie — without it, redirect to /login.
+# Auth: cookie-based session gate + basic_auth on verify endpoint only.
 
 ecossistematroy.com {
-    route {
-        # 1. Login page — always accessible
-        handle /login {
-            root * /srv
-            rewrite * /login.html
-            file_server
-        }
+    # Login page — always accessible, no auth
+    handle /login {
+        root * /srv
+        rewrite * /login.html
+        file_server
+    }
 
-        # 2. Auth verification — checks credentials via basic_auth
-        handle /api/auth/verify {
-            basic_auth {
-                NettoManoel $2a$14$apFLzDbn3aZUkUG0w7t2Veo2K2d028lQeooRpoisB4rDtuOThbb0.
-            }
-            respond "OK" 200
+    # Auth verify — validates credentials, returns 200 on success
+    handle /api/auth/verify {
+        basic_auth {
+            NettoManoel $2a$14$apFLzDbn3aZUkUG0w7t2Veo2K2d028lQeooRpoisB4rDtuOThbb0.
         }
+        respond "OK" 200
+    }
 
-        # 3. No session cookie → redirect to login
-        @noSession expression `{http.request.cookie.troy_session} != "authenticated"`
-        handle @noSession {
-            redir /login 302
-        }
-
-        # 4. Has valid cookie → proxy to gateway
+    # Authenticated users (have session cookie) → proxy to gateway
+    @hasSession header_regexp session Cookie troy_session=authenticated
+    handle @hasSession {
         reverse_proxy openclaw-gateway:18789
+    }
+
+    # Everyone else → redirect to login
+    handle {
+        redir /login 302
     }
 }
 
