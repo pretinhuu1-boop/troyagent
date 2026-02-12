@@ -10,14 +10,7 @@ ecossistematroy.com {
         file_server
     }
 
-    # Static assets for login page (CSS, images) without auth
-    @loginAssets path /login-assets/*
-    handle @loginAssets {
-        root * /srv
-        file_server
-    }
-
-    # Auth verification endpoint
+    # Auth verification endpoint — validates credentials
     @verify path /api/auth/verify
     handle @verify {
         basic_auth {
@@ -26,7 +19,7 @@ ecossistematroy.com {
         respond "OK" 200
     }
 
-    # WebSocket connections need auth token (handled by gateway)
+    # WebSocket connections — gateway handles its own token auth
     @websocket {
         header Connection *Upgrade*
         header Upgrade websocket
@@ -35,7 +28,15 @@ ecossistematroy.com {
         reverse_proxy openclaw-gateway:18789
     }
 
-    # Everything else requires basic_auth
+    # All other requests: if no Authorization header, redirect to login
+    @noAuth {
+        not header Authorization *
+    }
+    handle @noAuth {
+        redir /login 302
+    }
+
+    # Authenticated requests: validate and proxy
     handle {
         basic_auth {
             NettoManoel $2a$14$apFLzDbn3aZUkUG0w7t2Veo2K2d028lQeooRpoisB4rDtuOThbb0.
