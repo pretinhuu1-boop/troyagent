@@ -1,4 +1,11 @@
-// Troy Vape — Dashboard de Vendas
+// Troy Vape — Dashboard de Vendas (Canvas App)
+//
+// This is the CANVAS version of the dashboard, served by canvas-host.
+// The agent interacts with this via `canvas eval` calling `window.troyDashboard.*`.
+//
+// A parallel Lit version exists at `ui/src/ui/views/vendas.ts` for the operator UI.
+// Both share the same localStorage keys and stay in sync automatically.
+// This file's `window.troyDashboard` is the canonical API contract documented in SOUL.md.
 
 const STORAGE_KEY = 'troy_vape_orders';
 const FEED_KEY = 'troy_vape_feed';
@@ -17,7 +24,15 @@ let metrics = {
 let config = {
     whatsapp: '',
     pix: '',
-    storeName: 'Troy Vape'
+    storeName: 'Troy Vape',
+    hours: { weekdays: '08:00-17:00', saturday: '08:00-16:00', sunday: '' },
+    llmModel: 'deepseek/deepseek-r1',
+    businessRules: {
+        warranty: 'Não trabalhamos com garantia',
+        shippingDeadline: '48h úteis',
+        wholesaleMinQty: 10,
+        paymentMethod: 'Pix'
+    }
 };
 
 // --- Persistence (JSON file simulation via localStorage) ---
@@ -60,26 +75,53 @@ function initConfigUI() {
     const waInput = document.getElementById('cfg-whatsapp');
     const pixInput = document.getElementById('cfg-pix');
     const nameInput = document.getElementById('cfg-store-name');
+    const hoursWdInput = document.getElementById('cfg-hours-weekdays');
+    const hoursSatInput = document.getElementById('cfg-hours-saturday');
+    const hoursSunInput = document.getElementById('cfg-hours-sunday');
+    const llmSelect = document.getElementById('cfg-llm-model');
+    const warrantyInput = document.getElementById('cfg-warranty');
+    const shippingInput = document.getElementById('cfg-shipping');
+    const wholesaleInput = document.getElementById('cfg-wholesale');
+    const paymentInput = document.getElementById('cfg-payment');
 
+    // Populate existing values
     if (waInput) waInput.value = config.whatsapp;
     if (pixInput) pixInput.value = config.pix;
     if (nameInput) nameInput.value = config.storeName;
+    if (hoursWdInput) hoursWdInput.value = config.hours?.weekdays ?? '08:00-17:00';
+    if (hoursSatInput) hoursSatInput.value = config.hours?.saturday ?? '08:00-16:00';
+    if (hoursSunInput) hoursSunInput.value = config.hours?.sunday ?? '';
+    if (llmSelect) llmSelect.value = config.llmModel ?? 'deepseek/deepseek-r1';
+    if (warrantyInput) warrantyInput.value = config.businessRules?.warranty ?? '';
+    if (shippingInput) shippingInput.value = config.businessRules?.shippingDeadline ?? '48h úteis';
+    if (wholesaleInput) wholesaleInput.value = config.businessRules?.wholesaleMinQty ?? 10;
+    if (paymentInput) paymentInput.value = config.businessRules?.paymentMethod ?? 'Pix';
 
     document.getElementById('btn-save-config').addEventListener('click', () => {
         config.whatsapp = (waInput.value || '').replace(/\D/g, '');
         config.pix = pixInput.value.trim();
         config.storeName = nameInput.value.trim() || 'Troy Vape';
+        config.hours = {
+            weekdays: (hoursWdInput?.value || '').trim() || '08:00-17:00',
+            saturday: (hoursSatInput?.value || '').trim() || '08:00-16:00',
+            sunday: (hoursSunInput?.value || '').trim(),
+        };
+        config.llmModel = llmSelect?.value || 'deepseek/deepseek-r1';
+        config.businessRules = {
+            warranty: (warrantyInput?.value || '').trim() || 'Não trabalhamos com garantia',
+            shippingDeadline: (shippingInput?.value || '').trim() || '48h úteis',
+            wholesaleMinQty: parseInt(wholesaleInput?.value) || 10,
+            paymentMethod: (paymentInput?.value || '').trim() || 'Pix',
+        };
         saveConfig();
 
-        // Update input with cleaned number
         waInput.value = config.whatsapp;
 
-        // Show saved badge
         const badge = document.getElementById('config-status');
         badge.style.display = 'inline-block';
         setTimeout(() => { badge.style.display = 'none'; }, 2500);
 
-        addFeedEvent('system', `Configurações atualizadas — WA: ...${config.whatsapp.slice(-4) || '???'}, Pix: ${config.pix ? '✓' : '✗'}`);
+        addFeedEvent('system', `Config salva — WA: ...${config.whatsapp.slice(-4) || '???'}, Pix: ${config.pix ? '✓' : '✗'}, Modelo: ${config.llmModel}`);
     });
 
     document.getElementById('btn-test-forward').addEventListener('click', () => {
@@ -313,38 +355,6 @@ window.troyDashboard = {
     }
 };
 
-// --- Demo Data (for dev/testing) ---
-function loadDemoData() {
-    if (orders.length > 0) return; // Only load if empty
-
-    const demoOrders = [
-        {
-            customer: 'João Silva',
-            items: [{ quantity: 2, name: 'Ignite V15', sku: 'IGNITE-V15', price: 69.92 }],
-            total: 139.84
-        },
-        {
-            customer: 'Maria Costa',
-            items: [
-                { quantity: 1, name: 'ElfBar BC Pro', sku: 'ELFBAR-BC-PRO', price: 94.95 },
-                { quantity: 1, name: 'Nikbar 30.000', sku: 'NIKBAR-30000', price: 64.95 }
-            ],
-            total: 159.90
-        }
-    ];
-
-    demoOrders.forEach(d => window.troyDashboard.addOrder(d));
-
-    // Simulate status progression
-    if (orders.length >= 2) {
-        window.troyDashboard.updateStatus(orders[0].id, 'pago');
-    }
-
-    // Demo metrics
-    metrics = { conversations: 15, catalogs: 10, checkouts: 5, payments: 3 };
-    saveState();
-    updateMetrics();
-}
 
 // --- Init ---
 function init() {
@@ -362,8 +372,6 @@ function init() {
     updateMetrics();
     initConfigUI();
 
-    // Load demo data if empty
-    loadDemoData();
 
     // Filter change
     document.getElementById('filter-status').addEventListener('change', renderOrders);

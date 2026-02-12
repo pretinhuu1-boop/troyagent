@@ -145,34 +145,134 @@
             </div>
         </section>
 
-        <!-- Settings Panel -->
-        <section class="panel config-panel">
-            <div class="panel-header">
-                <h2 class="playfair">⚙️ Configurações</h2>
-                <span id="config-status" class="config-saved-badge" style="display:none;">✓ Salvo</span>
-            </div>
-            <div class="config-grid">
-                <div class="config-field">
-                    <label for="cfg-whatsapp">📱 WhatsApp do Escritório</label>
-                    <input type="tel" id="cfg-whatsapp" placeholder="5511999999999" autocomplete="off">
-                    <span class="config-hint">Número completo com DDI+DDD (ex: 5511987654321)</span>
+        <!-- Settings Header -->
+        <div class="settings-header">
+            <h2 class="playfair">Configurações</h2>
+            <span id="config-status" class="config-saved-badge" style="display:none;">✓ Salvo</span>
+        </div>
+
+        <!-- Settings Cards Grid -->
+        <div class="settings-grid">
+            <!-- Card: Loja & Pagamento -->
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <span class="settings-card-icon">💳</span>
+                    <div>
+                        <h3 class="settings-card-title">Loja & Pagamento</h3>
+                        <p class="settings-card-desc">WhatsApp, Pix e nome da loja</p>
+                    </div>
                 </div>
-                <div class="config-field">
-                    <label for="cfg-pix">🔑 Chave Pix da Loja</label>
-                    <input type="text" id="cfg-pix" placeholder="email@loja.com ou CPF/CNPJ" autocomplete="off">
-                    <span class="config-hint">Email, CPF, CNPJ ou chave aleatória</span>
-                </div>
-                <div class="config-field">
-                    <label for="cfg-store-name">🏪 Nome da Loja</label>
-                    <input type="text" id="cfg-store-name" placeholder="Troy Vape" autocomplete="off">
-                    <span class="config-hint">Usado no cabeçalho do catálogo e nas mensagens</span>
+                <div class="settings-card-body">
+                    <div class="config-field">
+                        <label for="cfg-whatsapp">WhatsApp do Escritório</label>
+                        <input type="tel" id="cfg-whatsapp" placeholder="5511999999999" autocomplete="off">
+                        <span class="config-hint">DDI+DDD (ex: 5511987654321)</span>
+                    </div>
+                    <div class="config-field">
+                        <label for="cfg-pix">Chave Pix</label>
+                        <input type="text" id="cfg-pix" placeholder="email@loja.com ou CPF/CNPJ" autocomplete="off">
+                        <span class="config-hint">Email, CPF, CNPJ ou chave aleatória</span>
+                    </div>
+                    <div class="config-field">
+                        <label for="cfg-store-name">Nome da Loja</label>
+                        <input type="text" id="cfg-store-name" placeholder="Troy Vape" autocomplete="off">
+                    </div>
                 </div>
             </div>
-            <div class="config-actions">
-                <button id="btn-save-config" class="gold-btn">Salvar Configurações</button>
-                <button id="btn-test-forward" class="test-btn">📤 Testar Encaminhamento</button>
+
+            <!-- Card: Horário de Atendimento -->
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <span class="settings-card-icon">🕐</span>
+                    <div>
+                        <h3 class="settings-card-title">Horário de Atendimento</h3>
+                        <p class="settings-card-desc">Dias e horários de funcionamento</p>
+                    </div>
+                </div>
+                <div class="settings-card-body">
+                    <div class="config-field">
+                        <label for="cfg-hours-weekdays">Segunda a Sexta</label>
+                        <input type="text" id="cfg-hours-weekdays" placeholder="08:00-17:00" autocomplete="off">
+                        <span class="config-hint">Formato: HH:MM-HH:MM (vazio = fechado)</span>
+                    </div>
+                    <div class="settings-card-row">
+                        <div class="config-field">
+                            <label for="cfg-hours-saturday">Sábado</label>
+                            <input type="text" id="cfg-hours-saturday" placeholder="08:00-16:00" autocomplete="off">
+                        </div>
+                        <div class="config-field">
+                            <label for="cfg-hours-sunday">Domingo</label>
+                            <input type="text" id="cfg-hours-sunday" placeholder="Fechado" autocomplete="off">
+                        </div>
+                    </div>
+                </div>
             </div>
-        </section>
+
+            <!-- Card: Modelo de IA -->
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <span class="settings-card-icon">🤖</span>
+                    <div>
+                        <h3 class="settings-card-title">Modelo de IA</h3>
+                        <p class="settings-card-desc">Motor que responde seus clientes</p>
+                    </div>
+                </div>
+                <div class="settings-card-body">
+                    <div class="config-field">
+                        <label for="cfg-llm-model">Modelo LLM (OpenRouter)</label>
+                        <select id="cfg-llm-model">
+                            <option value="deepseek/deepseek-r1">DeepSeek R1 (Reasoning)</option>
+                            <option value="qwen/qwq-32b">Qwen QwQ 32B (Reasoning)</option>
+                            <option value="anthropic/claude-sonnet-4">Claude Sonnet 4</option>
+                            <option value="anthropic/claude-haiku-4">Claude Haiku 4 (Rápido)</option>
+                            <option value="openai/gpt-4o">GPT-4o</option>
+                            <option value="openai/gpt-4o-mini">GPT-4o Mini (Econômico)</option>
+                            <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+                        </select>
+                        <span class="config-hint">Modelo usado pelo agente para responder clientes</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card: Regras de Negócio -->
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <span class="settings-card-icon">📋</span>
+                    <div>
+                        <h3 class="settings-card-title">Regras de Negócio</h3>
+                        <p class="settings-card-desc">Garantia, envio, atacado e pagamento</p>
+                    </div>
+                </div>
+                <div class="settings-card-body">
+                    <div class="settings-card-row">
+                        <div class="config-field">
+                            <label for="cfg-warranty">Garantia</label>
+                            <input type="text" id="cfg-warranty" placeholder="Não trabalhamos com garantia" autocomplete="off">
+                        </div>
+                        <div class="config-field">
+                            <label for="cfg-shipping">Prazo de Envio</label>
+                            <input type="text" id="cfg-shipping" placeholder="48h úteis" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="settings-card-row">
+                        <div class="config-field">
+                            <label for="cfg-wholesale">Qtd Mín. Atacado</label>
+                            <input type="number" id="cfg-wholesale" placeholder="10" min="1" autocomplete="off">
+                        </div>
+                        <div class="config-field">
+                            <label for="cfg-payment">Pagamento</label>
+                            <input type="text" id="cfg-payment" placeholder="Pix" autocomplete="off">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Config Actions -->
+        <div class="config-actions">
+            <button id="btn-save-config" class="gold-btn">Salvar Configurações</button>
+            <button id="btn-test-forward" class="test-btn">📤 Testar Encaminhamento</button>
+        </div>
     </main>
 
     <script src="dashboard.js"></script>

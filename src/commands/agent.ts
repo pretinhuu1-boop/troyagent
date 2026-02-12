@@ -455,6 +455,13 @@ export async function agentCommand(
             extraSystemPrompt: opts.extraSystemPrompt,
             streamParams: opts.streamParams,
             agentDir,
+            onReasoningStream: (evt) => {
+              emitAgentEvent({
+                runId,
+                stream: "reasoning",
+                data: { text: evt.text },
+              });
+            },
             onAgentEvent: (evt) => {
               // Track lifecycle end for fallback emission below.
               if (
