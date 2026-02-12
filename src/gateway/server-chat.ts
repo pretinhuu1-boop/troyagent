@@ -93,28 +93,67 @@ export function createChatRunRegistry(): ChatRunRegistry {
 export type ChatRunState = {
   registry: ChatRunRegistry;
   buffers: Map<string, string>;
+  buffersReasoning: Map<string, string>;
   deltaSentAt: Map<string, number>;
+  deltaReasoningSentAt: Map<string, number>;
   abortedRuns: Map<string, number>;
   clear: () => void;
 };
 
+
+// Safety net: prune stale entries that were never cleaned up (e.g. agent crash without lifecycle event)
+const CHAT_RUN_STATE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function pruneStaleMapEntries(...maps: Map<string, unknown>[]) {
+  // deltaSentAt and deltaReasoningSentAt store timestamps — prune entries older than TTL
+  const cutoff = Date.now() - CHAT_RUN_STATE_TTL_MS;
+  for (const map of maps) {
+    for (const [key, value] of map) {
+      if (typeof value === "number" && value < cutoff) {
+        // This entry hasn't been updated in 30 min — the run is likely dead
+        map.delete(key);
+      }
+    }
+  }
+}
+
 export function createChatRunState(): ChatRunState {
   const registry = createChatRunRegistry();
   const buffers = new Map<string, string>();
+  const buffersReasoning = new Map<string, string>();
   const deltaSentAt = new Map<string, number>();
+  const deltaReasoningSentAt = new Map<string, number>();
   const abortedRuns = new Map<string, number>();
+
+  // Periodic cleanup of stale entries
+  const pruneInterval = setInterval(() => {
+    pruneStaleMapEntries(deltaSentAt, deltaReasoningSentAt, abortedRuns);
+    // Clean buffers for runs whose timestamps were pruned
+    for (const key of buffers.keys()) {
+      if (!deltaSentAt.has(key) && !deltaReasoningSentAt.has(key)) {
+        buffers.delete(key);
+        buffersReasoning.delete(key);
+      }
+    }
+  }, 5 * 60 * 1000); // every 5 minutes
+  // Don't keep the process alive just for this interval
+  if (pruneInterval.unref) pruneInterval.unref();
 
   const clear = () => {
     registry.clear();
     buffers.clear();
+    buffersReasoning.clear();
     deltaSentAt.clear();
+    deltaReasoningSentAt.clear();
     abortedRuns.clear();
   };
 
   return {
     registry,
     buffers,
+    buffersReasoning,
     deltaSentAt,
+    deltaReasoningSentAt,
     abortedRuns,
     clear,
   };
@@ -253,6 +292,37 @@ export function createAgentEventHandler({
     nodeSendToSession(sessionKey, "chat", payload);
   };
 
+  const emitChatReasoningDelta = (
+    sessionKey: string,
+    clientRunId: string,
+    seq: number,
+    text: string,
+  ) => {
+    chatRunState.buffersReasoning.set(clientRunId, text);
+    const now = Date.now();
+    const last = chatRunState.deltaReasoningSentAt.get(clientRunId) ?? 0;
+    if (now - last < 150) {
+      return;
+    }
+    chatRunState.deltaReasoningSentAt.set(clientRunId, now);
+    const payload = {
+      runId: clientRunId,
+      sessionKey,
+      seq,
+      state: "delta" as const,
+      message: {
+        role: "assistant",
+        content: [{ type: "reasoning", text }],
+        timestamp: now,
+      },
+    };
+    // Suppress webchat broadcast for heartbeat runs when showOk is false
+    if (!shouldSuppressHeartbeatBroadcast(clientRunId)) {
+      broadcast("chat", payload, { dropIfSlow: true });
+    }
+    nodeSendToSession(sessionKey, "chat", payload);
+  };
+
   const emitChatFinal = (
     sessionKey: string,
     clientRunId: string,
@@ -261,8 +331,11 @@ export function createAgentEventHandler({
     error?: unknown,
   ) => {
     const text = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
+    const reasoning = chatRunState.buffersReasoning.get(clientRunId)?.trim() ?? "";
     chatRunState.buffers.delete(clientRunId);
+    chatRunState.buffersReasoning.delete(clientRunId);
     chatRunState.deltaSentAt.delete(clientRunId);
+    chatRunState.deltaReasoningSentAt.delete(clientRunId);
     if (jobState === "done") {
       const payload = {
         runId: clientRunId,
@@ -272,7 +345,10 @@ export function createAgentEventHandler({
         message: text
           ? {
               role: "assistant",
-              content: [{ type: "text", text }],
+              content: [
+                ...(reasoning ? [{ type: "reasoning", text: reasoning }] : []),
+                { type: "text", text },
+              ],
               timestamp: Date.now(),
             }
           : undefined,
@@ -371,6 +447,8 @@ export function createAgentEventHandler({
       nodeSendToSession(sessionKey, "agent", isToolEvent ? toolPayload : agentPayload);
       if (!isAborted && evt.stream === "assistant" && typeof evt.data?.text === "string") {
         emitChatDelta(sessionKey, clientRunId, evt.seq, evt.data.text);
+      } else if (!isAborted && evt.stream === "reasoning" && typeof evt.data?.text === "string") {
+        emitChatReasoningDelta(sessionKey, clientRunId, evt.seq, evt.data.text);
       } else if (!isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
         if (chatLink) {
           const finished = chatRunState.registry.shift(evt.runId);
@@ -398,7 +476,9 @@ export function createAgentEventHandler({
         chatRunState.abortedRuns.delete(clientRunId);
         chatRunState.abortedRuns.delete(evt.runId);
         chatRunState.buffers.delete(clientRunId);
+        chatRunState.buffersReasoning.delete(clientRunId);
         chatRunState.deltaSentAt.delete(clientRunId);
+        chatRunState.deltaReasoningSentAt.delete(clientRunId);
         if (chatLink) {
           chatRunState.registry.remove(evt.runId, clientRunId, sessionKey);
         }
