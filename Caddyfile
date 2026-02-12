@@ -1,9 +1,10 @@
-# Caddyfile for Troy Vape
-# Uses internal (self-signed) TLS certificate
-# Access via: https://<VPS_IP>
-# Note: Browser will show security warning on first access - click "Advanced" > "Proceed"
+# Caddyfile for Troy Vape — ecossistematroy.com
+# Caddy automatically provisions Let's Encrypt HTTPS certificates
 
-:443 {
-    tls internal
+ecossistematroy.com {
     reverse_proxy openclaw-gateway:18789
+}
+
+www.ecossistematroy.com {
+    redir https://ecossistematroy.com{uri} permanent
 }
