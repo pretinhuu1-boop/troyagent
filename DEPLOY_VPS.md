@@ -28,12 +28,47 @@ nano .env
 ```
 
 **Variáveis Críticas:**
-- `TWILIO_ACCOUNT_SID`: Suas credenciais do Twilio.
-- `TWILIO_AUTH_TOKEN`: Token de autenticação.
-- `TWILIO_WHATSAPP_FROM`: Número oficial (`whatsapp:+55...`).
+- `OPENROUTER_API_KEY`: Sua chave da OpenRouter (para Pony Alpha ou outros modelos).
 - `OPENCLAW_GATEWAY_TOKEN`: Crie uma senha forte para proteger o gateway.
 
-## 3. Build e Execução
+> **Nota sobre o modelo Pony Alpha:**
+> Este modelo possui funcionalidade de "reasoning" (raciocínio). Para ativá-lo corretamente, certifique-se de que o arquivo `.openclaw/openclaw.json` (que será criado automaticamente ou pode ser editado manualmente na pasta do usuário no VPS) contenha:
+> ```json
+> "agents": {
+>   "defaults": {
+>     "model": { "primary": "openrouter/pony-alpha" },
+>     "models": {
+>       "openrouter/pony-alpha": { "alias": "Pony Alpha" }
+>     }
+>   }
+> }
+> ```
+
+```
+
+## 2.1 Deploy Automatizado (Recomendado)
+
+Foi criado um script para facilitar o envio dos arquivos e o restart dos serviços.
+Para usá-lo, execute no terminal local:
+
+```bash
+./deploy.sh [IP_DO_VPS] [USUARIO]
+```
+
+Exemplo:
+```bash
+./deploy.sh 187.77.37.78 root
+```
+
+Isso fará:
+1. Sincronização dos arquivos via `rsync` (ignorando node_modules, .git, etc).
+2. Verificação do arquivo `.env` remoto.
+3. Reconstrução e reinício dos containers via SSH.
+
+---
+
+## 3. Build e Execução Manual (Caso prefira)
+
 
 O projeto inclui um `Dockerfile` otimizado. Para subir tudo:
 
@@ -45,7 +80,7 @@ docker-compose up -d --build
 O comando acima irá:
 1. Instalar dependências.
 2. Compilar o Backend e o Frontend (UI).
-3. Iniciar o Gateway (porta 18789) e a CLI.
+3. Iniciar o Gateway (porta 18789) com suporte ao modelo configurado.
 
 ## 4. Acesso
 

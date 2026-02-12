@@ -1,0 +1,9 @@
+# Caddyfile for Troy Vape
+# Uses internal (self-signed) TLS certificate
+# Access via: https://<VPS_IP>
+# Note: Browser will show security warning on first access - click "Advanced" > "Proceed"
+
+:443 {
+    tls internal
+    reverse_proxy openclaw-gateway:18789
+}
