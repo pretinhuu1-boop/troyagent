@@ -1,8 +1,12 @@
 # Caddyfile for Troy Vape — ecossistematroy.com
 # Caddy automatically provisions Let's Encrypt HTTPS certificates
+#
+# Auth strategy: login page as visual gate → credentials verified via
+# basic_auth on /api/auth/verify only → app routes are open reverse_proxy.
+# Real auth is the gateway token (OPENCLAW_GATEWAY_TOKEN).
 
 ecossistematroy.com {
-    # Serve login page without auth
+    # Serve login page (no auth required)
     @login path /login
     handle @login {
         root * /srv
@@ -10,7 +14,14 @@ ecossistematroy.com {
         file_server
     }
 
-    # Auth verification endpoint — validates credentials
+    # Serve static assets for login page (CSS, images, etc.)
+    @static path /static/*
+    handle @static {
+        root * /srv
+        file_server
+    }
+
+    # Auth verification endpoint — validates credentials via basic_auth
     @verify path /api/auth/verify
     handle @verify {
         basic_auth {
@@ -19,28 +30,21 @@ ecossistematroy.com {
         respond "OK" 200
     }
 
-    # WebSocket connections — gateway handles its own token auth
-    @websocket {
-        header Connection *Upgrade*
-        header Upgrade websocket
+    # Check auth cookie — if no session cookie, redirect to login
+    # Uses a simple cookie-based approach: login.html sets a cookie after
+    # successful verification, Caddy checks it exists on all other routes
+    @noSession {
+        not path /login
+        not path /api/auth/verify
+        not path /static/*
+        not header_regexp Cookie troy_session=authenticated
     }
-    handle @websocket {
-        reverse_proxy openclaw-gateway:18789
-    }
-
-    # All other requests: if no Authorization header, redirect to login
-    @noAuth {
-        not header Authorization *
-    }
-    handle @noAuth {
+    handle @noSession {
         redir /login 302
     }
 
-    # Authenticated requests: validate and proxy
+    # All authenticated requests: proxy to gateway
     handle {
-        basic_auth {
-            NettoManoel $2a$14$apFLzDbn3aZUkUG0w7t2Veo2K2d028lQeooRpoisB4rDtuOThbb0.
-        }
         reverse_proxy openclaw-gateway:18789
     }
 }

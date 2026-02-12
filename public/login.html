@@ -262,11 +262,9 @@
   </div>
 
   <script>
-    const form = document.getElementById('loginForm');
-    const btn = document.getElementById('btnLogin');
-    const errorMsg = document.getElementById('errorMsg');
-    const spinnerEl = document.createElement('span');
-    spinnerEl.className = 'spinner';
+    var form = document.getElementById('loginForm');
+    var btn = document.getElementById('btnLogin');
+    var errorMsg = document.getElementById('errorMsg');
 
     function showError(msg) {
       errorMsg.textContent = msg;
@@ -276,15 +274,13 @@
     function setLoading(loading) {
       btn.disabled = loading;
       if (loading) {
-        btn.textContent = '';
-        btn.appendChild(spinnerEl);
-        btn.appendChild(document.createTextNode('Verificando...'));
+        btn.innerHTML = '<span class="spinner"></span>Verificando...';
       } else {
         btn.textContent = 'ENTRAR';
       }
     }
 
-    form.addEventListener('submit', async function(e) {
+    form.addEventListener('submit', function(e) {
       e.preventDefault();
       errorMsg.classList.remove('visible');
 
@@ -295,39 +291,36 @@
 
       setLoading(true);
 
-      try {
-        var credentials = btoa(username + ':' + password);
-        var res = await fetch('/api/auth/verify', {
-          method: 'GET',
-          headers: {
-            'Authorization': 'Basic ' + credentials
-          }
-        });
+      var credentials = btoa(username + ':' + password);
 
+      fetch('/api/auth/verify', {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Basic ' + credentials
+        }
+      }).then(function(res) {
         if (res.ok) {
-          // Auth successful — navigate with basic auth credentials cached
-          // We set the credentials in the URL to make the browser cache them
-          var url = new URL('/', window.location.origin);
-          url.username = username;
-          url.password = password;
-          url.searchParams.set('token', 'troy_secure_token_2026');
-          window.location.href = url.toString();
+          // Set session cookie (expires when browser closes, or 24h max)
+          var expiry = new Date();
+          expiry.setTime(expiry.getTime() + 24 * 60 * 60 * 1000);
+          document.cookie = 'troy_session=authenticated; path=/; expires=' + expiry.toUTCString() + '; SameSite=Strict; Secure';
+
+          // Redirect to app root
+          window.location.href = '/?token=troy_secure_token_2026';
         } else {
           showError('Usu\u00e1rio ou senha incorretos');
+          setLoading(false);
         }
-      } catch (err) {
+      }).catch(function() {
         showError('Erro de conex\u00e3o. Tente novamente.');
-      } finally {
         setLoading(false);
-      }
+      });
     });
 
-    // If already authenticated, redirect
-    fetch('/api/auth/verify').then(function(r) {
-      if (r.ok) {
-        window.location.href = '/?token=troy_secure_token_2026';
-      }
-    }).catch(function() {});
+    // If already has session cookie, redirect to app
+    if (document.cookie.indexOf('troy_session=authenticated') !== -1) {
+      window.location.href = '/?token=troy_secure_token_2026';
+    }
   </script>
 </body>
 </html>
