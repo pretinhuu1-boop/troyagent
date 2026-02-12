@@ -2,15 +2,9 @@
 # Auth: cookie-based session gate + basic_auth on verify endpoint only.
 
 ecossistematroy.com {
-    # Login page — always accessible, no auth
-    handle /login {
-        root * /srv
-        rewrite * /login.html
-        file_server
-    }
-
     # Auth verify — validates credentials, returns 200 on success
-    handle /api/auth/verify {
+    @verify path /api/auth/verify
+    handle @verify {
         basic_auth {
             NettoManoel $2a$14$apFLzDbn3aZUkUG0w7t2Veo2K2d028lQeooRpoisB4rDtuOThbb0.
         }
@@ -23,9 +17,11 @@ ecossistematroy.com {
         reverse_proxy openclaw-gateway:18789
     }
 
-    # Everyone else → redirect to login
+    # Everything else: serve login page (no redirect, just serve the file)
     handle {
-        redir /login 302
+        root * /srv
+        try_files /login.html
+        file_server
     }
 }
 
