@@ -2,7 +2,46 @@
 # Caddy automatically provisions Let's Encrypt HTTPS certificates
 
 ecossistematroy.com {
-    reverse_proxy openclaw-gateway:18789
+    # Serve login page without auth
+    @login path /login
+    handle @login {
+        root * /srv
+        rewrite * /login.html
+        file_server
+    }
+
+    # Static assets for login page (CSS, images) without auth
+    @loginAssets path /login-assets/*
+    handle @loginAssets {
+        root * /srv
+        file_server
+    }
+
+    # Auth verification endpoint
+    @verify path /api/auth/verify
+    handle @verify {
+        basic_auth {
+            NettoManoel $2a$14$apFLzDbn3aZUkUG0w7t2Veo2K2d028lQeooRpoisB4rDtuOThbb0.
+        }
+        respond "OK" 200
+    }
+
+    # WebSocket connections need auth token (handled by gateway)
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    handle @websocket {
+        reverse_proxy openclaw-gateway:18789
+    }
+
+    # Everything else requires basic_auth
+    handle {
+        basic_auth {
+            NettoManoel $2a$14$apFLzDbn3aZUkUG0w7t2Veo2K2d028lQeooRpoisB4rDtuOThbb0.
+        }
+        reverse_proxy openclaw-gateway:18789
+    }
 }
 
 www.ecossistematroy.com {
