@@ -6,16 +6,15 @@
 # All other routes require a troy_session cookie — without it, redirect to /login.
 
 ecossistematroy.com {
-    # Use route for explicit ordering (first match wins)
     route {
-        # 1. Serve login page (no auth required)
+        # 1. Login page — always accessible
         handle /login {
             root * /srv
             rewrite * /login.html
             file_server
         }
 
-        # 2. Auth verification endpoint — validates credentials via basic_auth
+        # 2. Auth verification — checks credentials via basic_auth
         handle /api/auth/verify {
             basic_auth {
                 NettoManoel $2a$14$apFLzDbn3aZUkUG0w7t2Veo2K2d028lQeooRpoisB4rDtuOThbb0.
@@ -24,14 +23,12 @@ ecossistematroy.com {
         }
 
         # 3. No session cookie → redirect to login
-        @noSession {
-            not header_regexp Cookie troy_session=authenticated
-        }
+        @noSession expression `{http.request.cookie.troy_session} != "authenticated"`
         handle @noSession {
             redir /login 302
         }
 
-        # 4. Authenticated → proxy to gateway
+        # 4. Has valid cookie → proxy to gateway
         reverse_proxy openclaw-gateway:18789
     }
 }
