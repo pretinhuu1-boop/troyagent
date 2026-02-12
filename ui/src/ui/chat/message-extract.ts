@@ -97,6 +97,11 @@ export function extractThinking(message: unknown): string | null {
         if (cleaned) {
           parts.push(cleaned);
         }
+      } else if (item.type === "reasoning" && typeof item.text === "string") {
+        const cleaned = item.text.trim();
+        if (cleaned) {
+          parts.push(cleaned);
+        }
       }
     }
   }
@@ -114,6 +119,26 @@ export function extractThinking(message: unknown): string | null {
   ];
   const extracted = matches.map((m) => (m[1] ?? "").trim()).filter(Boolean);
   return extracted.length > 0 ? extracted.join("\n") : null;
+}
+
+export function extractThinkingFromDelta(message: unknown): string | null {
+  const m = message as Record<string, unknown>;
+  const content = m.content;
+  if (Array.isArray(content)) {
+    const parts = content
+      .map((p) => {
+        const item = p as Record<string, unknown>;
+        if (item.type === "reasoning" && typeof item.text === "string") {
+          return item.text;
+        }
+        return null;
+      })
+      .filter((v): v is string => typeof v === "string");
+    if (parts.length > 0) {
+      return parts.join("\n");
+    }
+  }
+  return null;
 }
 
 export function extractThinkingCached(message: unknown): string | null {

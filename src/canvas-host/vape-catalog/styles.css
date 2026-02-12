@@ -693,6 +693,12 @@ footer p {
         align-items: flex-start;
     }
 
+    .add-btn {
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 0.95rem;
+    }
+
     .welcome h1 {
         font-size: 1.6rem;
     }
@@ -704,5 +710,80 @@ footer p {
     .cat-btn {
         padding: 6px 14px;
         font-size: 0.8rem;
+    }
+
+    .search-bar input {
+        font-size: 16px; /* prevents iOS zoom on focus */
+    }
+
+    .flavor-select {
+        font-size: 16px; /* prevents iOS zoom on focus */
+        padding: 10px;
+    }
+
+    .qty-input {
+        font-size: 16px; /* prevents iOS zoom */
+        width: 70px;
+        padding: 10px;
+    }
+
+    .drawer {
+        padding: 20px 16px;
+        padding-bottom: env(safe-area-inset-bottom, 20px);
+    }
+
+    .gold-btn,
+    .close-btn {
+        padding: 14px;
+        font-size: 1rem;
+        min-height: 48px; /* touch target */
+    }
+
+    .footer-wa-link {
+        padding: 12px 24px;
+        font-size: 1rem;
+        min-height: 48px;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .cart-status {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+    }
+}
+
+/* Extra small — WhatsApp WebView / narrow phones */
+@media (max-width: 360px) {
+    header {
+        padding: 12px 3%;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .logo {
+        font-size: 1rem;
+    }
+
+    main {
+        padding: 16px 3%;
+    }
+
+    .welcome h1 {
+        font-size: 1.3rem;
+    }
+
+    .product-card {
+        padding: 12px;
+        border-radius: 14px;
+    }
+
+    .product-info h3 {
+        font-size: 1rem;
+    }
+
+    .price {
+        font-size: 1.2rem;
     }
 }

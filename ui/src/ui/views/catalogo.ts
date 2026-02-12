@@ -2,7 +2,7 @@ import { html, nothing } from "lit";
 
 /* ── Types ───────────────────────────────────────────────────── */
 interface Product {
-  id: number;
+  id: string;
   sku: string;
   name: string;
   description: string;
@@ -24,35 +24,72 @@ let editing: Product | null = null;
 let showForm = false;
 let deleteTarget: Product | null = null;
 let savedTimer: number | null = null;
+let showSavedBadge = false;
 
-/* ── Default products (from vape-products.json) ──────────────── */
-const DEFAULTS: Product[] = [
-  { id: 1, sku: "IGNITE-V15", name: "Ignite V15", description: "Vape descartável premium com 15.000 puffs", price: 69.92, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=Ignite+V15", category: "Ignite", flavors: ["Strawberry Banana", "Blue Razz", "Watermelon Ice"] },
-  { id: 2, sku: "IGNITE-V25", name: "Ignite V25", description: "25.000 puffs com tecnologia mesh coil", price: 89.90, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=Ignite+V25", category: "Ignite", flavors: ["Mango Peach", "Grape Ice", "Mixed Berry"] },
-  { id: 3, sku: "LOST-MARY", name: "Lost Mary", description: "Design compacto com sabores exclusivos", price: 44.95, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=Lost+Mary", category: "Lost Mary", flavors: ["Pineapple Mango", "Triple Berry Ice", "Peach Berry"] },
-  { id: 4, sku: "ELFBAR-BC-PRO", name: "ElfBar BC Pro", description: "Pod recarregável com refil de sabor", price: 94.95, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=ElfBar+BC+Pro", category: "ElfBar", flavors: ["Blueberry Sour Apple", "Strawberry Mango", "Triple Melon"] },
-  { id: 5, sku: "ELFBAR-TE6000", name: "ElfBar TE6000", description: "6.000 puffs com design ergonômico", price: 59.95, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=ElfBar+TE6000", category: "ElfBar", flavors: ["Cranberry Grape", "Sakura Grape", "Blueberry Ice"] },
-  { id: 6, sku: "OXBAR-G8000", name: "OxBar G8000", description: "8.000 puffs com bateria de longa duração", price: 54.95, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=OxBar+G8000", category: "OxBar", flavors: ["Raspberry Watermelon", "Peach Mango", "Cool Mint"] },
-  { id: 7, sku: "NIKBAR-8000", name: "Nikbar 8.000", description: "8.000 puffs premium com mesh coil", price: 39.95, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=Nikbar+8000", category: "Nikbar", flavors: ["Tropical Punch", "Aloe Grape", "Lush Ice"] },
-  { id: 8, sku: "NIKBAR-30000", name: "Nikbar 30.000", description: "Ultra-duração com 30.000 puffs", price: 64.95, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=Nikbar+30000", category: "Nikbar", flavors: ["Strawberry Kiwi", "Blue Razz Ice", "Mango Ice"] },
-  { id: 9, sku: "OXBAR-MAZE-PRO", name: "OxBar Maze Pro", description: "Design futurista com 10.000 puffs", price: 79.95, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=OxBar+Maze+Pro", category: "OxBar", flavors: ["Dragon Fruit", "Kiwi Passion Guava", "Strawberry Ice Cream"] },
-  { id: 10, sku: "WAKA-SOLO2", name: "WAKA soLo2", description: "Pod descartável compacto e potente", price: 49.95, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=WAKA+soLo2", category: "WAKA", flavors: ["Cherry Bomb", "Lemon Lime", "Tobacco Vanilla"] },
-  { id: 11, sku: "ELFBAR-LOWIT", name: "ElfBar Lowit", description: "Sistema pod ultra-portátil e estiloso", price: 74.95, image: "https://via.placeholder.com/300x300/1a1a2e/d4af37?text=ElfBar+Lowit", category: "ElfBar", flavors: ["Coconut Melon", "White Peach Razz", "Blueberry Cloudberry"] },
-];
+/** Form field state — bound via @input, read in handleSave. No more getElementById. */
+let formFields = { name: "", sku: "", price: "", category: "", description: "", image: "", flavors: "" };
+
+/**
+ * Canonical product catalog — imported from the same JSON served by the canvas host.
+ * This is the single source of truth. The operator UI uses localStorage as a
+ * working copy, and "Restaurar Padrão" resets to this canonical list.
+ */
+let canonicalProducts: Product[] = [];
+
+async function loadCanonicalProducts(): Promise<Product[]> {
+  if (canonicalProducts.length > 0) return canonicalProducts;
+  try {
+    // Try fetching from canvas host first (works when gateway is running)
+    const res = await fetch("/canvas/vape-catalog/vape-products.json");
+    if (res.ok) {
+      canonicalProducts = await res.json();
+      return canonicalProducts;
+    }
+  } catch { /* fallback below */ }
+  // Fallback: empty list (operator must add products manually)
+  return [];
+}
 
 /* ── Persistence ─────────────────────────────────────────────── */
 function loadProducts() {
   if (loaded) return;
   try {
     const s = localStorage.getItem(PRODUCTS_KEY);
-    if (s) products = JSON.parse(s);
-    else products = [...DEFAULTS];
-  } catch { products = [...DEFAULTS]; }
+    if (s) {
+      products = JSON.parse(s);
+      // Migrate legacy numeric IDs to string
+      for (const p of products) {
+        if (typeof p.id === "number") p.id = String(p.id);
+      }
+    }
+  } catch { /* products stays empty, will load canonical */ }
   loaded = true;
+}
+
+async function ensureProducts(state: CatalogoState) {
+  if (products.length === 0) {
+    const canonical = await loadCanonicalProducts();
+    if (canonical.length > 0) {
+      products = canonical.map(p => ({ ...p }));
+      saveProducts();
+      state.requestUpdate();
+    }
+  }
 }
 
 function saveProducts() {
   localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+}
+
+/* ── URL validation ──────────────────────────────────────────── */
+function isSafeImageUrl(url: string): boolean {
+  if (!url) return true; // empty is ok, just no image
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 /* ── Unique categories ───────────────────────────────────────── */
@@ -64,16 +101,29 @@ function categories(): string[] {
 export function renderCatalogo(state: CatalogoState) {
   loadProducts();
 
+  // Trigger async load of canonical products if needed
+  void ensureProducts(state);
+
   const handleAdd = () => {
     editing = null;
+    formFields = { name: "", sku: "", price: "", category: "", description: "", image: "", flavors: "" };
     showForm = true;
     state.requestUpdate();
   };
 
   const handleEdit = (p: Product) => {
     editing = { ...p, flavors: [...p.flavors] };
+    formFields = {
+      name: p.name, sku: p.sku, price: String(p.price),
+      category: p.category, description: p.description,
+      image: p.image, flavors: p.flavors.join(", "),
+    };
     showForm = true;
     state.requestUpdate();
+  };
+
+  const onField = (field: keyof typeof formFields) => (e: Event) => {
+    formFields[field] = (e.target as HTMLInputElement).value;
   };
 
   const handleDelete = (p: Product) => {
@@ -102,23 +152,18 @@ export function renderCatalogo(state: CatalogoState) {
   };
 
   const handleSave = () => {
-    const nameEl = document.getElementById("pf-name") as HTMLInputElement | null;
-    const skuEl = document.getElementById("pf-sku") as HTMLInputElement | null;
-    const priceEl = document.getElementById("pf-price") as HTMLInputElement | null;
-    const catEl = document.getElementById("pf-category") as HTMLInputElement | null;
-    const descEl = document.getElementById("pf-desc") as HTMLTextAreaElement | null;
-    const imgEl = document.getElementById("pf-image") as HTMLInputElement | null;
-    const flavorsEl = document.getElementById("pf-flavors") as HTMLInputElement | null;
-
-    const name = nameEl?.value.trim() ?? "";
-    const sku = skuEl?.value.trim() ?? "";
-    const price = parseFloat(priceEl?.value ?? "0");
-    const category = catEl?.value.trim() ?? "";
-    const description = descEl?.value.trim() ?? "";
-    const image = imgEl?.value.trim() ?? "";
-    const flavors = (flavorsEl?.value ?? "").split(",").map(f => f.trim()).filter(Boolean);
+    const name = formFields.name.trim();
+    const sku = formFields.sku.trim();
+    const price = parseFloat(formFields.price || "0");
+    const category = formFields.category.trim();
+    const description = formFields.description.trim();
+    const image = formFields.image.trim();
+    const flavors = formFields.flavors.split(",").map(f => f.trim()).filter(Boolean);
 
     if (!name || !sku || !price) return;
+
+    // Validate image URL to prevent XSS
+    if (image && !isSafeImageUrl(image)) return;
 
     if (editing) {
       const idx = products.findIndex(p => p.id === editing!.id);
@@ -126,7 +171,7 @@ export function renderCatalogo(state: CatalogoState) {
         products[idx] = { ...products[idx], name, sku, price, category, description, image, flavors };
       }
     } else {
-      const newId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
+      const newId = sku.toLowerCase().replace(/\s+/g, "-");
       products.push({ id: newId, name, sku, price, category, description, image, flavors });
     }
 
@@ -134,17 +179,19 @@ export function renderCatalogo(state: CatalogoState) {
     showForm = false;
     editing = null;
 
-    // Show saved feedback
+    // Show saved feedback via state (no more getElementById)
+    showSavedBadge = true;
     savedTimer && clearTimeout(savedTimer);
-    const badge = document.getElementById("tv-cat-saved");
-    if (badge) badge.style.display = "inline-block";
-    savedTimer = window.setTimeout(() => { if (badge) badge.style.display = "none"; }, 2500);
+    savedTimer = window.setTimeout(() => { showSavedBadge = false; state.requestUpdate(); }, 2500);
 
     state.requestUpdate();
   };
 
-  const handleResetDefaults = () => {
-    products = [...DEFAULTS];
+  const handleResetDefaults = async () => {
+    const canonical = await loadCanonicalProducts();
+    if (canonical.length > 0) {
+      products = canonical.map(p => ({ ...p }));
+    }
     saveProducts();
     state.requestUpdate();
   };
@@ -159,6 +206,9 @@ export function renderCatalogo(state: CatalogoState) {
     URL.revokeObjectURL(url);
   };
 
+  // Sanitize image URLs for rendering
+  const safeImageUrl = (url: string) => isSafeImageUrl(url) ? url : "";
+
   return html`
     <div class="tv-catalogo">
       <div class="tv-panel-header">
@@ -168,7 +218,7 @@ export function renderCatalogo(state: CatalogoState) {
           <span class="tv-category-count">${categories().length} categorias</span>
         </div>
         <div class="tv-header-actions">
-          <span id="tv-cat-saved" class="tv-saved-badge" style="display:none;">✓ Salvo</span>
+          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Salvo</span>` : nothing}
           <button class="tv-btn-sm" @click=${handleExportJson}>📥 Exportar JSON</button>
           <button class="tv-btn-sm" @click=${handleResetDefaults}>🔄 Restaurar Padrão</button>
           <button class="tv-btn-gold" @click=${handleAdd}>+ Novo Produto</button>
@@ -191,31 +241,31 @@ export function renderCatalogo(state: CatalogoState) {
           <div class="tv-form-grid">
             <div class="tv-config-field">
               <label>Nome *</label>
-              <input type="text" id="pf-name" .value=${editing?.name ?? ""} placeholder="Ex: Ignite V25" />
+              <input type="text" .value=${formFields.name} @input=${onField("name")} placeholder="Ex: Ignite V25" />
             </div>
             <div class="tv-config-field">
               <label>SKU *</label>
-              <input type="text" id="pf-sku" .value=${editing?.sku ?? ""} placeholder="Ex: IGNITE-V25" />
+              <input type="text" .value=${formFields.sku} @input=${onField("sku")} placeholder="Ex: IGNITE-V25" />
             </div>
             <div class="tv-config-field">
               <label>Preço (R$) *</label>
-              <input type="number" id="pf-price" .value=${String(editing?.price ?? "")} step="0.01" min="0" placeholder="89.90" />
+              <input type="number" .value=${formFields.price} @input=${onField("price")} step="0.01" min="0" placeholder="89.90" />
             </div>
             <div class="tv-config-field">
               <label>Categoria</label>
-              <input type="text" id="pf-category" .value=${editing?.category ?? ""} placeholder="Ex: Ignite" />
+              <input type="text" .value=${formFields.category} @input=${onField("category")} placeholder="Ex: Ignite" />
             </div>
             <div class="tv-config-field" style="grid-column: span 2;">
               <label>Descrição</label>
-              <textarea id="pf-desc" rows="2" placeholder="Descrição breve do produto">${editing?.description ?? ""}</textarea>
+              <textarea rows="2" .value=${formFields.description} @input=${onField("description")} placeholder="Descrição breve do produto"></textarea>
             </div>
             <div class="tv-config-field" style="grid-column: span 2;">
               <label>URL da Imagem</label>
-              <input type="url" id="pf-image" .value=${editing?.image ?? ""} placeholder="https://..." />
+              <input type="url" .value=${formFields.image} @input=${onField("image")} placeholder="https://..." />
             </div>
             <div class="tv-config-field" style="grid-column: span 2;">
               <label>Sabores (separados por vírgula)</label>
-              <input type="text" id="pf-flavors" .value=${editing?.flavors?.join(", ") ?? ""} placeholder="Grape Ice, Mango Peach, Blue Razz" />
+              <input type="text" .value=${formFields.flavors} @input=${onField("flavors")} placeholder="Grape Ice, Mango Peach, Blue Razz" />
             </div>
           </div>
           <div class="tv-config-actions">
@@ -229,7 +279,7 @@ export function renderCatalogo(state: CatalogoState) {
       <div class="tv-product-grid">
         ${products.map(p => html`
           <div class="tv-product-card">
-            <div class="tv-product-img" style="background-image: url('${p.image}')"></div>
+            <div class="tv-product-img" style="background-image: url('${safeImageUrl(p.image)}')"></div>
             <div class="tv-product-body">
               <div class="tv-product-header">
                 <strong>${p.name}</strong>

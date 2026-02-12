@@ -71,6 +71,7 @@ export function renderReadingIndicatorGroup(assistant?: AssistantIdentity) {
 
 export function renderStreamingGroup(
   text: string,
+  reasoning: string | null,
   startedAt: number,
   onOpenSidebar?: (content: string) => void,
   assistant?: AssistantIdentity,
@@ -88,10 +89,13 @@ export function renderStreamingGroup(
         ${renderGroupedMessage(
           {
             role: "assistant",
-            content: [{ type: "text", text }],
+            content: [
+              ...(reasoning ? [{ type: "reasoning", text: reasoning }] : []),
+              { type: "text", text },
+            ],
             timestamp: startedAt,
           },
-          { isStreaming: true, showReasoning: false },
+          { isStreaming: true, showReasoning: true },
           onOpenSidebar,
         )}
         <div class="chat-group-footer">

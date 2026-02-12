@@ -32,6 +32,7 @@ export type ChatProps = {
   messages: unknown[];
   toolMessages: unknown[];
   stream: string | null;
+  reasoningStream: string | null;
   streamStartedAt: number | null;
   assistantAvatarUrl?: string | null;
   draft: string;
@@ -231,6 +232,7 @@ export function renderChat(props: ChatProps) {
           if (item.kind === "stream") {
             return renderStreamingGroup(
               item.text,
+              props.reasoningStream,
               item.startedAt,
               props.onOpenSidebar,
               assistantIdentity,
@@ -498,13 +500,22 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
     }
   }
 
-  if (props.stream !== null) {
+  if (props.stream !== null || props.reasoningStream !== null) {
     const key = `stream:${props.sessionKey}:${props.streamStartedAt ?? "live"}`;
-    if (props.stream.trim().length > 0) {
+    // Show stream item if we have content OR if we are waiting (stream valid but empty)
+    // If stream is null, we are not streaming.
+    // If stream is "", we are streaming but have no content yet -> show reading indicator?
+    // Actually Logic:
+    // If props.stream !== null, we are streaming.
+    
+    // We display "stream" item if we have any text OR reasoning, otherwise reading indicator.
+    const hasContent = (props.stream && props.stream.trim().length > 0) || (props.reasoningStream && props.reasoningStream.trim().length > 0);
+    
+    if (hasContent) {
       items.push({
         kind: "stream",
         key,
-        text: props.stream,
+        text: props.stream ?? "",
         startedAt: props.streamStartedAt ?? Date.now(),
       });
     } else {

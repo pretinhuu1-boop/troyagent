@@ -1,6 +1,6 @@
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type { ChatAttachment } from "../ui-types.ts";
-import { extractText } from "../chat/message-extract.ts";
+import { extractText, extractThinkingFromDelta } from "../chat/message-extract.ts";
 import { generateUUID } from "../uuid.ts";
 
 export type ChatState = {
@@ -15,6 +15,7 @@ export type ChatState = {
   chatAttachments: ChatAttachment[];
   chatRunId: string | null;
   chatStream: string | null;
+  chatReasoningStream: string | null;
   chatStreamStartedAt: number | null;
   lastError: string | null;
 };
@@ -103,6 +104,7 @@ export async function sendChatMessage(
   const runId = generateUUID();
   state.chatRunId = runId;
   state.chatStream = "";
+  state.chatReasoningStream = "";
   state.chatStreamStartedAt = now;
 
   // Convert attachments to API format
@@ -135,6 +137,7 @@ export async function sendChatMessage(
     const error = String(err);
     state.chatRunId = null;
     state.chatStream = null;
+    state.chatReasoningStream = null;
     state.chatStreamStartedAt = null;
     state.lastError = error;
     state.chatMessages = [
@@ -186,23 +189,37 @@ export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
   }
 
   if (payload.state === "delta") {
-    const next = extractText(payload.message);
-    if (typeof next === "string") {
+    // Extract text content
+    const nextText = extractText(payload.message);
+    if (typeof nextText === "string") {
       const current = state.chatStream ?? "";
-      if (!current || next.length >= current.length) {
-        state.chatStream = next;
+      if (!current || nextText.length >= current.length) {
+        state.chatStream = nextText;
       }
     }
+    
+    // Extract reasoning content
+    const nextReasoning = extractThinkingFromDelta(payload.message);
+    if (typeof nextReasoning === "string") {
+      const current = state.chatReasoningStream ?? "";
+      if (!current || nextReasoning.length >= current.length) {
+        state.chatReasoningStream = nextReasoning;
+      }
+    }
+
   } else if (payload.state === "final") {
     state.chatStream = null;
+    state.chatReasoningStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
   } else if (payload.state === "aborted") {
     state.chatStream = null;
+    state.chatReasoningStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
   } else if (payload.state === "error") {
     state.chatStream = null;
+    state.chatReasoningStream = null;
     state.chatRunId = null;
     state.chatStreamStartedAt = null;
     state.lastError = payload.errorMessage ?? "chat error";
