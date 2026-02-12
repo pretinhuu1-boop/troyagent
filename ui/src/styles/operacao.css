@@ -3,33 +3,22 @@
    Gold/dark luxe theme for Vendas + Catálogo tabs
    ══════════════════════════════════════════════════════════ */
 
-/* ── Variables ─────────────────────────────────────────────── */
+/* ── Variables — NEW BRUTALISM ─────────────────────────────── */
 :root {
-    --tv-gold: #d4af37;
-    --tv-gold-light: #f0d060;
-    --tv-gold-dark: #b8941e;
-    --tv-bg-card: rgba(26, 26, 46, 0.85);
-    --tv-bg-card-hover: rgba(36, 36, 60, 0.9);
-    --tv-border: rgba(212, 175, 55, 0.15);
-    --tv-text: #e0e0e0;
-    --tv-text-muted: #999;
-    --tv-success: #4caf50;
-    --tv-warning: #ff9800;
-    --tv-danger: #e53935;
-    --tv-radius: 10px;
-    --tv-input-bg: rgba(0, 0, 0, 0.25);
-    --tv-btn-sm-bg: rgba(255, 255, 255, 0.06);
-    --tv-btn-sm-border: rgba(255, 255, 255, 0.1);
-}
-
-:root[data-theme="light"] {
-    --tv-bg-card: var(--bg-elevated);
+    --tv-gold: var(--accent);
+    --tv-gold-light: var(--accent-hover);
+    --tv-gold-dark: #7ccf00;
+    --tv-bg-card: var(--card);
     --tv-bg-card-hover: var(--bg-hover);
-    --tv-border: rgba(212, 175, 55, 0.25);
-    --tv-text: #1a1a2e;
-    --tv-text-muted: #555;
-    --tv-input-bg: var(--bg-muted);
-    --tv-btn-sm-bg: var(--bg-muted);
+    --tv-border: var(--border);
+    --tv-text: var(--text);
+    --tv-text-muted: var(--muted);
+    --tv-success: var(--ok);
+    --tv-warning: var(--warn);
+    --tv-danger: var(--danger);
+    --tv-radius: 0px;
+    --tv-input-bg: var(--card);
+    --tv-btn-sm-bg: var(--secondary);
     --tv-btn-sm-border: var(--border);
 }
 
@@ -61,15 +50,16 @@
     align-items: center;
     gap: 0.75rem;
     background: var(--tv-bg-card);
-    border: 1px solid var(--tv-border);
+    border: var(--border-width) solid var(--tv-border);
     border-radius: var(--tv-radius);
     padding: 1rem 1.2rem;
-    transition: transform 0.15s, border-color 0.15s;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .tv-kpi:hover {
-    border-color: var(--tv-gold);
-    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+    transform: translate(-2px, -2px);
 }
 
 .tv-kpi-icon {
@@ -105,16 +95,19 @@
 /* ── Panel ─────────────────────────────────────────────────── */
 .tv-panel {
     background: var(--tv-bg-card);
-    border: 1px solid var(--tv-border);
+    border: var(--border-width) solid var(--tv-border);
     border-radius: var(--tv-radius);
     padding: 1rem 1.2rem;
+    box-shadow: var(--shadow-md);
 }
 
 .tv-panel h3 {
     margin: 0 0 0.75rem;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--tv-gold);
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: var(--text-strong);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .tv-panel-header {
@@ -144,22 +137,23 @@
 .tv-table th {
     text-align: left;
     padding: 0.5rem 0.6rem;
-    border-bottom: 1px solid var(--tv-border);
+    border-bottom: var(--border-width) solid var(--tv-border);
     color: var(--tv-text-muted);
-    font-weight: 500;
+    font-weight: 700;
     text-transform: uppercase;
     font-size: 0.7rem;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
+    font-family: var(--mono);
 }
 
 .tv-table td {
     padding: 0.5rem 0.6rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--tv-border);
     color: var(--tv-text);
 }
 
 .tv-order-row:hover {
-    background: rgba(212, 175, 55, 0.04);
+    background: var(--accent-subtle);
 }
 
 .tv-order-id {
@@ -190,10 +184,12 @@
 .tv-badge {
     display: inline-block;
     padding: 0.15rem 0.5rem;
-    border-radius: 4px;
+    border-radius: 0;
     font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
 }
 
 .tv-badge--novo {
@@ -235,18 +231,21 @@
     align-items: flex-start;
     gap: 0.5rem;
     padding: 0.4rem 0.5rem;
-    border-radius: 6px;
+    border-radius: 0;
     font-size: 0.8rem;
     color: var(--tv-text);
-    transition: background 0.15s;
+    border-left: 3px solid transparent;
+    transition: background 0.1s, border-color 0.1s;
 }
 
 .tv-feed-item:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--accent-subtle);
+    border-left-color: var(--accent);
 }
 
 .tv-feed-item--latest {
-    background: rgba(212, 175, 55, 0.06);
+    background: var(--accent-subtle);
+    border-left-color: var(--accent);
 }
 
 .tv-feed-icon {
@@ -278,8 +277,9 @@
 .tv-metric {
     text-align: center;
     padding: 0.6rem;
-    border: 1px solid var(--tv-border);
-    border-radius: 8px;
+    border: var(--border-width) solid var(--tv-border);
+    border-radius: 0;
+    box-shadow: var(--shadow-sm);
 }
 
 .tv-metric-label {
@@ -315,17 +315,19 @@
 
 .tv-settings-card {
     background: var(--tv-bg-card);
-    border: 1px solid var(--tv-border);
-    border-radius: 14px;
+    border: var(--border-width) solid var(--tv-border);
+    border-radius: 0;
     padding: 1.25rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    transition: border-color 0.2s;
+    box-shadow: var(--shadow-md);
+    transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .tv-settings-card:hover {
-    border-color: rgba(212, 175, 55, 0.35);
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-lg);
 }
 
 .tv-settings-card-header {
@@ -384,11 +386,13 @@
 
 .tv-config-field label {
     display: block;
-    font-size: 0.75rem;
-    font-weight: 500;
+    font-size: 0.7rem;
+    font-weight: 700;
     color: var(--tv-text-muted);
     margin-bottom: 0.3rem;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: var(--mono);
 }
 
 .tv-config-field input,
@@ -397,12 +401,12 @@
     width: 100%;
     padding: 0.55rem 0.75rem;
     background: var(--tv-input-bg);
-    border: 1px solid var(--tv-border);
-    border-radius: 8px;
+    border: var(--border-width) solid var(--tv-border);
+    border-radius: 0;
     color: var(--tv-text);
     font-size: 0.85rem;
     font-family: inherit;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: border-color 0.1s, box-shadow 0.1s;
     box-sizing: border-box;
 }
 
@@ -411,11 +415,11 @@
 .tv-config-field select:focus {
     outline: none;
     border-color: var(--tv-gold);
-    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.1);
+    box-shadow: var(--focus-ring);
 }
 
 .tv-config-field select option {
-    background: var(--tv-card-bg, #1a1a2e);
+    background: var(--card);
     color: var(--tv-text);
 }
 
@@ -444,50 +448,61 @@
 /* ── Buttons ───────────────────────────────────────────────── */
 .tv-btn-gold {
     padding: 0.5rem 1.2rem;
-    background: linear-gradient(135deg, var(--tv-gold), var(--tv-gold-dark));
-    color: #1a1a2e;
-    border: none;
-    border-radius: 6px;
-    font-weight: 600;
+    background: var(--accent);
+    color: var(--accent-foreground);
+    border: var(--border-width) solid var(--border);
+    border-radius: 0;
+    font-weight: 700;
     font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     cursor: pointer;
-    transition: transform 0.1s, filter 0.1s;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .tv-btn-gold:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.1);
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-md);
 }
 
 .tv-btn-outline {
     padding: 0.5rem 1.2rem;
     background: transparent;
-    color: var(--tv-gold);
-    border: 1px solid var(--tv-gold);
-    border-radius: 6px;
-    font-weight: 500;
+    color: var(--text-strong);
+    border: var(--border-width) solid var(--border);
+    border-radius: 0;
+    font-weight: 700;
     font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     cursor: pointer;
-    transition: background 0.15s;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .tv-btn-outline:hover {
-    background: rgba(212, 175, 55, 0.1);
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-md);
 }
 
 .tv-btn-sm {
     padding: 0.3rem 0.7rem;
     background: var(--tv-btn-sm-bg);
     color: var(--tv-text);
-    border: 1px solid var(--tv-btn-sm-border);
-    border-radius: 5px;
+    border: var(--border-width) solid var(--tv-btn-sm-border);
+    border-radius: 0;
     font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
     cursor: pointer;
-    transition: background 0.15s;
+    box-shadow: 2px 2px 0px 0px rgba(0,0,0,1);
+    transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .tv-btn-sm:hover {
-    background: rgba(255, 255, 255, 0.1);
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0px 0px rgba(0,0,0,1);
 }
 
 .tv-btn-sm--danger:hover {
@@ -498,27 +513,35 @@
 
 .tv-btn-danger {
     padding: 0.4rem 1rem;
-    background: rgba(229, 57, 53, 0.15);
+    background: var(--danger-subtle);
     color: var(--tv-danger);
-    border: 1px solid var(--tv-danger);
-    border-radius: 6px;
-    font-weight: 600;
+    border: var(--border-width) solid var(--border);
+    border-radius: 0;
+    font-weight: 700;
     font-size: 0.8rem;
+    text-transform: uppercase;
     cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .tv-btn-danger:hover {
-    background: rgba(229, 57, 53, 0.25);
+    background: var(--danger);
+    color: white;
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-md);
 }
 
 .tv-saved-badge {
     display: inline-block;
     padding: 0.2rem 0.6rem;
-    background: rgba(76, 175, 80, 0.15);
+    background: var(--ok-subtle);
     color: var(--tv-success);
-    border-radius: 4px;
+    border: 1px solid currentColor;
+    border-radius: 0;
     font-size: 0.72rem;
-    font-weight: 600;
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
 /* ── Select ────────────────────────────────────────────────── */
@@ -526,8 +549,8 @@
     padding: 0.3rem 0.6rem;
     background: var(--tv-input-bg);
     color: var(--tv-text);
-    border: 1px solid var(--tv-border);
-    border-radius: 5px;
+    border: var(--border-width) solid var(--tv-border);
+    border-radius: 0;
     font-size: 0.78rem;
     cursor: pointer;
 }
@@ -535,6 +558,7 @@
 .tv-select:focus {
     outline: none;
     border-color: var(--tv-gold);
+    box-shadow: var(--focus-ring);
 }
 
 /* ── Catálogo: Product Grid ────────────────────────────────── */
@@ -556,15 +580,19 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
-    background: rgba(229, 57, 53, 0.08);
-    border: 1px solid var(--tv-danger);
-    border-radius: var(--tv-radius);
+    background: var(--danger-subtle);
+    border: var(--border-width) solid var(--tv-danger);
+    border-radius: 0;
     font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
     flex-wrap: wrap;
 }
 
 .tv-form-panel {
     border-color: var(--tv-gold);
+    border-width: var(--border-width);
+    box-shadow: var(--shadow-md);
 }
 
 .tv-form-grid {
@@ -592,15 +620,16 @@
 
 .tv-product-card {
     background: var(--tv-bg-card);
-    border: 1px solid var(--tv-border);
+    border: var(--border-width) solid var(--tv-border);
     border-radius: var(--tv-radius);
     overflow: hidden;
-    transition: border-color 0.15s, transform 0.15s;
+    box-shadow: var(--shadow-md);
+    transition: transform 0.1s, box-shadow 0.1s;
 }
 
 .tv-product-card:hover {
-    border-color: var(--tv-gold);
-    transform: translateY(-1px);
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-lg);
 }
 
 .tv-product-img {
@@ -657,10 +686,13 @@
 
 .tv-flavor-tag {
     padding: 0.12rem 0.45rem;
-    background: rgba(212, 175, 55, 0.08);
-    color: var(--tv-gold-light);
-    border-radius: 3px;
+    background: var(--accent-subtle);
+    color: var(--tv-gold);
+    border: 1px solid currentColor;
+    border-radius: 0;
     font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
 }
 
 .tv-product-actions {

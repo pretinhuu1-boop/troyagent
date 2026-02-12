@@ -1,22 +1,23 @@
 /* Tool Card Styles */
 .chat-tool-card {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: var(--border-width) solid var(--border);
+  border-radius: 0;
   padding: 12px;
   margin-top: 8px;
   background: var(--card);
-  box-shadow: inset 0 1px 0 var(--card-highlight);
+  box-shadow: var(--shadow-sm);
   transition:
-    border-color 150ms ease-out,
-    background 150ms ease-out;
-  /* Fixed max-height to ensure cards don't expand too much */
+    border-color 100ms ease-out,
+    background 100ms ease-out,
+    transform 100ms ease-out,
+    box-shadow 100ms ease-out;
   max-height: 120px;
   overflow: hidden;
 }
 
 .chat-tool-card:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-md);
 }
 
 /* First tool card in a group - no top margin */
@@ -45,9 +46,11 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 13px;
   line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .chat-tool-card__icon {
@@ -128,13 +131,15 @@
   color: var(--muted);
   margin-top: 8px;
   padding: 8px 10px;
-  background: var(--secondary);
-  border-radius: var(--radius-md);
+  background: #1a1a1a;
+  color: #A3E635;
+  border-radius: 0;
   white-space: pre-wrap;
   overflow: hidden;
   max-height: 44px;
   line-height: 1.4;
   border: 1px solid var(--border);
+  font-family: var(--mono);
 }
 
 .chat-tool-card--clickable:hover .chat-tool-card__preview {
@@ -149,15 +154,18 @@
   margin-top: 6px;
   padding: 6px 8px;
   background: var(--secondary);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
+  border: 1px solid var(--border);
   white-space: pre-wrap;
   word-break: break-word;
+  font-family: var(--mono);
 }
 
 /* Reading Indicator */
 .chat-reading-indicator {
   background: transparent;
-  border: 1px solid var(--border);
+  border: var(--border-width) solid var(--border);
+  border-radius: 0;
   padding: 12px;
   display: inline-flex;
 }
