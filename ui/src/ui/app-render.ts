@@ -79,6 +79,7 @@ import { renderSkills } from "./views/skills.ts";
 import { renderUsage } from "./views/usage.ts";
 import { renderVendas } from "./views/vendas.ts";
 import { renderCatalogo } from "./views/catalogo.ts";
+import { renderCRM } from "./views/crm.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
@@ -1214,6 +1215,15 @@ export function renderApp(state: AppViewState) {
         ${state.tab === "catalogo"
       ? renderCatalogo({
         requestUpdate: () => state.requestUpdate(),
+      })
+      : nothing
+    }
+
+        ${state.tab === "crm"
+      ? renderCRM({
+        requestUpdate: () => state.requestUpdate(),
+        client: state.client,
+        connected: state.connected,
       })
       : nothing
     }

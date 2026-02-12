@@ -1,7 +1,7 @@
 import type { IconName } from "./icons.js";
 
 export const TAB_GROUPS = [
-  { label: "Operação", tabs: ["vendas", "catalogo"] },
+  { label: "Operação", tabs: ["vendas", "catalogo", "crm"] },
   { label: "Chat", tabs: ["chat"] },
   {
     label: "Controle",
@@ -14,6 +14,7 @@ export const TAB_GROUPS = [
 export type Tab =
   | "vendas"
   | "catalogo"
+  | "crm"
   | "agents"
   | "overview"
   | "channels"
@@ -31,6 +32,7 @@ export type Tab =
 const TAB_PATHS: Record<Tab, string> = {
   vendas: "/vendas",
   catalogo: "/catalogo",
+  crm: "/crm",
   agents: "/agents",
   overview: "/overview",
   channels: "/channels",
@@ -133,6 +135,8 @@ export function iconForTab(tab: Tab): IconName {
       return "barChart";
     case "catalogo":
       return "folder";
+    case "crm":
+      return "users";
     case "agents":
       return "folder";
     case "chat":
@@ -170,6 +174,8 @@ export function titleForTab(tab: Tab) {
       return "Vendas";
     case "catalogo":
       return "Catálogo";
+    case "crm":
+      return "CRM";
     case "agents":
       return "Agentes";
     case "overview":
@@ -207,6 +213,8 @@ export function subtitleForTab(tab: Tab) {
       return "Dashboard de vendas, pedidos e métricas de conversão.";
     case "catalogo":
       return "Gerenciar produtos, preços e categorias do catálogo.";
+    case "crm":
+      return "Contatos, leads e histórico de interações com clientes.";
     case "agents":
       return "Gerenciar espaços de trabalho, ferramentas e identidades dos agentes.";
     case "overview":
