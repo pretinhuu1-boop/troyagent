@@ -15,6 +15,7 @@ export const pt_BR: TranslationMap = {
     resources: "Recursos",
   },
   nav: {
+    operacao: "Operação",
     chat: "Chat",
     control: "Controle",
     agent: "Agente",
@@ -23,6 +24,9 @@ export const pt_BR: TranslationMap = {
     collapse: "Recolher barra lateral",
   },
   tabs: {
+    vendas: "Vendas",
+    catalogo: "Catálogo",
+    crm: "CRM",
     agents: "Agentes",
     overview: "Visão Geral",
     channels: "Canais",
@@ -38,6 +42,9 @@ export const pt_BR: TranslationMap = {
     logs: "Logs",
   },
   subtitles: {
+    vendas: "Painel de vendas e métricas da loja.",
+    catalogo: "Gerenciar produtos, preços e estoque.",
+    crm: "Clientes, contatos e status do WhatsApp.",
     agents: "Gerenciar espaços de trabalho, ferramentas e identidades de agentes.",
     overview: "Status do gateway, pontos de entrada e leitura rápida de saúde.",
     channels: "Gerenciar canais e configurações.",

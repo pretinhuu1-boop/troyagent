@@ -1,0 +1,50 @@
+{
+  "gateway": {
+    "controlUi": {
+      "allowInsecureAuth": true
+    },
+    "trustedProxies": ["172.28.0.10"]
+  },
+  "plugins": {
+    "entries": {
+      "whatsapp": {
+        "enabled": true
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "openrouter:default": {
+        "provider": "openrouter",
+        "mode": "api_key"
+      }
+    }
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openrouter/google/gemini-2.5-flash"
+      },
+      "models": {
+        "openrouter/google/gemini-2.5-flash": {
+          "alias": "Gemini 2.5 Flash"
+        },
+        "openrouter/deepseek/deepseek-v3.2-20251201": {
+          "alias": "DeepSeek V3.2"
+        },
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free": {
+          "alias": "Llama 3.3 70B"
+        },
+        "openrouter/x-ai/grok-4.1-fast:free": {
+          "alias": "Grok 4.1 Fast"
+        },
+        "openrouter/google/gemini-2.5-flash-lite": {
+          "alias": "Gemini Flash Lite"
+        }
+      }
+    }
+  }
+}
