@@ -40,23 +40,33 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "openrouter/google/gemini-2.5-flash"
+        "primary": "openrouter/google/gemini-2.5-flash",
+        "fallbacks": [
+          "openrouter/google/gemini-2.5-flash-lite",
+          "openrouter/qwen/qwen3-coder:free",
+          "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+          "openrouter/mistralai/mistral-small-3.1-24b-instruct:free",
+          "openrouter/google/gemma-3-27b-it:free"
+        ]
       },
       "models": {
         "openrouter/google/gemini-2.5-flash": {
           "alias": "Gemini 2.5 Flash"
         },
-        "openrouter/deepseek/deepseek-v3.2-20251201": {
-          "alias": "DeepSeek V3.2"
-        },
-        "openrouter/meta-llama/llama-3.3-70b-instruct:free": {
-          "alias": "Llama 3.3 70B"
-        },
-        "openrouter/x-ai/grok-4.1-fast:free": {
-          "alias": "Grok 4.1 Fast"
-        },
         "openrouter/google/gemini-2.5-flash-lite": {
           "alias": "Gemini Flash Lite"
+        },
+        "openrouter/qwen/qwen3-coder:free": {
+          "alias": "Qwen3 Coder 480B (free)"
+        },
+        "openrouter/meta-llama/llama-3.3-70b-instruct:free": {
+          "alias": "Llama 3.3 70B (free)"
+        },
+        "openrouter/mistralai/mistral-small-3.1-24b-instruct:free": {
+          "alias": "Mistral Small 3.1 (free)"
+        },
+        "openrouter/google/gemma-3-27b-it:free": {
+          "alias": "Gemma 3 27B (free)"
         }
       }
     }
