@@ -40,22 +40,16 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "openrouter/google/gemini-2.5-flash",
+        "primary": "openrouter/qwen/qwen3-coder:free",
         "fallbacks": [
-          "openrouter/google/gemini-2.5-flash-lite",
-          "openrouter/qwen/qwen3-coder:free",
           "openrouter/meta-llama/llama-3.3-70b-instruct:free",
           "openrouter/mistralai/mistral-small-3.1-24b-instruct:free",
-          "openrouter/google/gemma-3-27b-it:free"
+          "openrouter/google/gemma-3-27b-it:free",
+          "openrouter/google/gemini-2.5-flash",
+          "openrouter/google/gemini-2.5-flash-lite"
         ]
       },
       "models": {
-        "openrouter/google/gemini-2.5-flash": {
-          "alias": "Gemini 2.5 Flash"
-        },
-        "openrouter/google/gemini-2.5-flash-lite": {
-          "alias": "Gemini Flash Lite"
-        },
         "openrouter/qwen/qwen3-coder:free": {
           "alias": "Qwen3 Coder 480B (free)"
         },
@@ -67,6 +61,12 @@
         },
         "openrouter/google/gemma-3-27b-it:free": {
           "alias": "Gemma 3 27B (free)"
+        },
+        "openrouter/google/gemini-2.5-flash": {
+          "alias": "Gemini 2.5 Flash"
+        },
+        "openrouter/google/gemini-2.5-flash-lite": {
+          "alias": "Gemini Flash Lite"
         }
       }
     }
