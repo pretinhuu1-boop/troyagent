@@ -252,7 +252,7 @@ async function waitForScan() {
     if (res.connected) {
       waStep = "connected";
       waQrDataUrl = null;
-      await void loadWhatsAppStatus();
+      void loadWhatsAppStatus();
     } else {
       waStep = "qr";
       waMessage = "QR expirou. Clique para gerar outro.";
@@ -516,21 +516,25 @@ function renderStyles() {
   return html`
     <style>
       .troy-crm {
-        padding: 1rem;
+        padding: 0.5rem 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        position: relative;
       }
 
-      /* WhatsApp Panel */
+      /* WhatsApp Panel — glassmorphism */
       .wa-panel {
-        background: var(--bg-2, #1a1a1a);
-        border: 1px solid var(--border, #333);
-        border-radius: 12px;
+        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
+        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
+        border-radius: var(--tv-radius, 14px);
         padding: 1.25rem;
-        margin-bottom: 1rem;
+        backdrop-filter: blur(8px);
       }
       .wa-panel.wa-connected {
         padding: 0.75rem 1rem;
-        border-color: #25d36620;
-        background: linear-gradient(135deg, #25d36608, transparent);
+        border-color: rgba(37, 211, 102, 0.25);
+        background: linear-gradient(135deg, rgba(37, 211, 102, 0.06), transparent);
       }
       .wa-connected-row {
         display: flex;
@@ -544,7 +548,7 @@ function renderStyles() {
       }
       .wa-connected-meta {
         font-size: 0.75rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         flex: 1;
       }
       .wa-status-dot {
@@ -559,7 +563,7 @@ function renderStyles() {
         box-shadow: 0 0 6px #25d36680;
       }
       .wa-status-dot.offline {
-        background: #ef4444;
+        background: var(--tv-danger, #ef4444);
       }
       .wa-header {
         display: flex;
@@ -572,13 +576,13 @@ function renderStyles() {
       }
       .wa-title {
         margin: 0;
-        color: var(--text, #eee);
+        color: var(--text-strong);
         font-size: 1.1rem;
         font-weight: 700;
       }
       .wa-subtitle {
         margin: 0.15rem 0 0;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         font-size: 0.8rem;
       }
 
@@ -608,13 +612,13 @@ function renderStyles() {
         width: 28px;
         height: 28px;
         border-radius: 50%;
-        background: var(--border, #333);
+        background: var(--tv-border, rgba(163, 230, 53, 0.15));
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 0.75rem;
         font-weight: 700;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
       }
       .wa-step.active .wa-step-num {
         background: #25d366;
@@ -626,7 +630,7 @@ function renderStyles() {
       }
       .wa-step-label {
         font-size: 0.65rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
@@ -637,7 +641,7 @@ function renderStyles() {
         flex: 1;
         max-width: 60px;
         height: 2px;
-        background: var(--border, #333);
+        background: var(--tv-border, rgba(163, 230, 53, 0.15));
         margin: 0 0.5rem;
         margin-bottom: 1rem;
       }
@@ -647,7 +651,7 @@ function renderStyles() {
         text-align: center;
       }
       .wa-instruction {
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         font-size: 0.85rem;
         margin: 0 0 1rem;
         line-height: 1.5;
@@ -656,28 +660,31 @@ function renderStyles() {
         background: #25d366;
         color: #fff;
         border: none;
-        border-radius: 8px;
+        border-radius: 10px;
         padding: 0.75rem 2rem;
         font-size: 0.9rem;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: all 0.3s;
       }
       .wa-btn-primary:hover {
         background: #20bd5a;
-        transform: translateY(-1px);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(37, 211, 102, 0.3);
       }
       .wa-btn-small {
         background: transparent;
-        color: var(--text-muted, #999);
-        border: 1px solid var(--border, #333);
-        border-radius: 4px;
+        color: var(--tv-text-muted);
+        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
+        border-radius: 8px;
         padding: 0.25rem 0.6rem;
         font-size: 0.7rem;
         cursor: pointer;
+        transition: all 0.2s;
       }
       .wa-btn-small:hover {
-        border-color: var(--text-muted, #999);
+        border-color: var(--tv-lime, #a3e635);
+        color: var(--tv-lime, #a3e635);
       }
 
       /* QR Code display */
@@ -689,7 +696,7 @@ function renderStyles() {
       }
       .wa-qr-frame {
         background: #fff;
-        border-radius: 12px;
+        border-radius: 16px;
         padding: 16px;
         display: inline-block;
         box-shadow: 0 4px 24px rgba(37, 211, 102, 0.15);
@@ -701,12 +708,12 @@ function renderStyles() {
         image-rendering: pixelated;
       }
       .wa-qr-hint {
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         font-size: 0.8rem;
         margin: 0;
       }
       .wa-qr-timer {
-        color: #f59e0b;
+        color: var(--tv-warning, #f59e0b);
         font-size: 0.7rem;
         font-weight: 600;
       }
@@ -718,13 +725,13 @@ function renderStyles() {
         justify-content: center;
         gap: 0.75rem;
         padding: 1.5rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         font-size: 0.85rem;
       }
       .wa-spinner {
         width: 20px;
         height: 20px;
-        border: 2px solid var(--border, #333);
+        border: 2px solid var(--tv-border, rgba(163, 230, 53, 0.15));
         border-top-color: #25d366;
         border-radius: 50%;
         animation: wa-spin 0.8s linear infinite;
@@ -751,7 +758,7 @@ function renderStyles() {
       }
       .wa-error {
         text-align: center;
-        color: #ef4444;
+        color: var(--tv-danger, #ef4444);
         font-size: 0.85rem;
       }
       .wa-error p {
@@ -762,63 +769,75 @@ function renderStyles() {
         align-items: center;
         gap: 0.5rem;
         justify-content: center;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         font-size: 0.85rem;
         padding: 1rem;
       }
 
-      /* CRM KPIs */
+      /* CRM KPIs — glassmorphism cards like vendas */
       .troy-crm-kpis {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 0.75rem;
-        margin-bottom: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1.25rem;
       }
       .troy-crm-kpi {
-        background: var(--bg-2, #1a1a1a);
-        border: 1px solid var(--border, #333);
-        border-radius: 8px;
-        padding: 1rem;
+        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
+        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
+        border-radius: var(--tv-radius, 14px);
+        padding: 1.25rem;
         text-align: center;
+        backdrop-filter: blur(8px);
+        transition: all 0.3s ease;
+      }
+      .troy-crm-kpi:hover {
+        border-color: var(--tv-lime, #a3e635);
+        transform: translateY(-4px);
+        box-shadow: 0 8px 24px var(--tv-glow, rgba(163, 230, 53, 0.08));
       }
       .troy-crm-kpi-value {
         display: block;
         font-size: 1.5rem;
         font-weight: 700;
-        color: var(--gold, #d4a017);
+        color: var(--tv-lime-light, #bef264);
       }
       .troy-crm-kpi-label {
         font-size: 0.75rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        margin-top: 4px;
       }
 
-      /* Pipeline */
+      /* Pipeline — glassmorphism pills */
       .troy-crm-pipeline {
         display: flex;
         gap: 0.5rem;
-        margin-bottom: 1rem;
         overflow-x: auto;
         padding-bottom: 0.25rem;
+        scrollbar-width: none;
+      }
+      .troy-crm-pipeline::-webkit-scrollbar {
+        display: none;
       }
       .troy-crm-pipeline-item {
         flex: 1;
         min-width: 80px;
-        background: var(--bg-2, #1a1a1a);
-        border: 1px solid var(--border, #333);
-        border-radius: 8px;
+        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
+        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
+        border-radius: var(--tv-radius, 14px);
         padding: 0.75rem 0.5rem;
         text-align: center;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(8px);
       }
       .troy-crm-pipeline-item:hover {
         border-color: var(--stage-color);
+        transform: translateY(-2px);
       }
       .troy-crm-pipeline-item.active {
         border-color: var(--stage-color);
-        background: color-mix(in srgb, var(--stage-color) 10%, var(--bg-2, #1a1a1a));
+        background: color-mix(in srgb, var(--stage-color) 10%, rgba(255, 255, 255, 0.03));
       }
       .troy-crm-pipeline-count {
         display: block;
@@ -828,60 +847,70 @@ function renderStyles() {
       }
       .troy-crm-pipeline-label {
         font-size: 0.65rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         text-transform: uppercase;
       }
 
-      /* Contact list */
+      /* Contact list — glassmorphism */
       .troy-crm-contacts-header {
         display: flex;
         gap: 0.75rem;
         align-items: center;
-        margin-bottom: 0.75rem;
       }
       .troy-crm-search {
         flex: 1;
-        padding: 0.5rem 0.75rem;
-        background: var(--bg-2, #1a1a1a);
-        border: 1px solid var(--border, #333);
-        border-radius: 6px;
-        color: var(--text, #eee);
-        font-size: 0.875rem;
+        padding: 12px 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
+        border-radius: 12px;
+        color: var(--tv-text);
+        font-size: 0.9rem;
+        outline: none;
+        transition: all 0.3s ease;
+        font-family: inherit;
+      }
+      .troy-crm-search::placeholder {
+        color: var(--tv-text-muted);
       }
       .troy-crm-search:focus {
-        outline: none;
-        border-color: var(--gold, #d4a017);
+        border-color: var(--tv-lime, #a3e635);
+        background: rgba(163, 230, 53, 0.05);
+        box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.08);
       }
       .troy-crm-count {
         font-size: 0.75rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         white-space: nowrap;
       }
       .troy-crm-contact-list {
         display: flex;
         flex-direction: column;
-        gap: 0.25rem;
+        gap: 0.5rem;
         max-height: 500px;
         overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(163, 230, 53, 0.2) transparent;
       }
       .troy-crm-contact-row {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
         align-items: center;
-        padding: 0.75rem;
-        background: var(--bg-2, #1a1a1a);
-        border: 1px solid var(--border, #333);
-        border-radius: 6px;
+        padding: 0.85rem 1rem;
+        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
+        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
+        border-radius: 12px;
         cursor: pointer;
-        transition: all 0.15s;
+        transition: all 0.3s ease;
       }
       .troy-crm-contact-row:hover {
-        border-color: var(--gold, #d4a017);
+        border-color: var(--tv-lime, #a3e635);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px var(--tv-glow, rgba(163, 230, 53, 0.08));
       }
       .troy-crm-contact-row.selected {
-        border-color: var(--gold, #d4a017);
-        background: color-mix(in srgb, var(--gold, #d4a017) 5%, var(--bg-2, #1a1a1a));
+        border-color: var(--tv-lime, #a3e635);
+        background: rgba(163, 230, 53, 0.04);
       }
       .troy-crm-contact-info {
         flex: 1;
@@ -890,12 +919,12 @@ function renderStyles() {
       .troy-crm-contact-name {
         display: block;
         font-weight: 600;
-        color: var(--text, #eee);
+        color: var(--text-strong);
         font-size: 0.875rem;
       }
       .troy-crm-contact-phone {
         font-size: 0.75rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
       }
       .troy-crm-contact-meta {
         display: flex;
@@ -904,20 +933,20 @@ function renderStyles() {
       }
       .troy-crm-contact-time {
         font-size: 0.7rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
       }
       .troy-crm-contact-stats {
         width: 100%;
         font-size: 0.7rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         display: flex;
         gap: 0.75rem;
         padding-top: 0.25rem;
-        border-top: 1px solid var(--border, #333);
+        border-top: 1px solid rgba(255, 255, 255, 0.04);
       }
       .troy-crm-stage-badge {
         padding: 0.15rem 0.5rem;
-        border-radius: 4px;
+        border-radius: 20px;
         font-size: 0.7rem;
         font-weight: 600;
         text-transform: uppercase;
@@ -928,7 +957,7 @@ function renderStyles() {
         padding: 0.25rem 0.75rem;
       }
 
-      /* Detail panel */
+      /* Detail panel — glassmorphism */
       .troy-crm-layout {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -941,22 +970,23 @@ function renderStyles() {
         }
       }
       .troy-crm-detail {
-        background: var(--bg-2, #1a1a1a);
-        border: 1px solid var(--border, #333);
-        border-radius: 8px;
-        padding: 1rem;
+        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
+        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
+        border-radius: var(--tv-radius, 14px);
+        padding: 1.25rem;
+        backdrop-filter: blur(8px);
       }
       .troy-crm-detail-header {
         margin-bottom: 1rem;
       }
       .troy-crm-detail-header h3 {
         margin: 0 0 0.25rem;
-        color: var(--text, #eee);
+        color: var(--text-strong);
         font-size: 1.1rem;
       }
       .troy-crm-detail-phone {
         font-size: 0.8rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         display: block;
         margin-bottom: 0.5rem;
       }
@@ -968,20 +998,22 @@ function renderStyles() {
       }
       .troy-crm-detail-stat {
         text-align: center;
-        padding: 0.5rem;
-        background: var(--bg-1, #111);
-        border-radius: 6px;
+        padding: 0.75rem;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        border-radius: 12px;
       }
       .troy-crm-detail-stat-value {
         display: block;
         font-weight: 700;
-        color: var(--gold, #d4a017);
+        color: var(--tv-lime-light, #bef264);
         font-size: 0.9rem;
       }
       .troy-crm-detail-stat-label {
         font-size: 0.65rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         text-transform: uppercase;
+        margin-top: 2px;
       }
       .troy-crm-detail-tags {
         display: flex;
@@ -990,68 +1022,90 @@ function renderStyles() {
         margin-bottom: 0.75rem;
       }
       .troy-crm-tag {
-        padding: 0.15rem 0.5rem;
-        background: color-mix(in srgb, var(--gold, #d4a017) 20%, transparent);
-        color: var(--gold, #d4a017);
-        border-radius: 4px;
+        padding: 3px 10px;
+        background: rgba(163, 230, 53, 0.08);
+        color: var(--tv-lime, #a3e635);
+        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
+        border-radius: 20px;
         font-size: 0.7rem;
+        font-weight: 600;
       }
       .troy-crm-detail-notes {
         font-size: 0.8rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         margin-bottom: 0.75rem;
-        padding: 0.5rem;
-        background: var(--bg-1, #111);
-        border-radius: 4px;
+        padding: 0.75rem;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        border-radius: 10px;
       }
       .troy-crm-detail-history h4 {
         margin: 0 0 0.5rem;
         font-size: 0.85rem;
-        color: var(--text, #eee);
+        color: var(--text-strong);
       }
       .troy-crm-history-item {
         display: flex;
         gap: 0.5rem;
         align-items: center;
         padding: 0.4rem 0;
-        border-bottom: 1px solid var(--border, #222);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
         font-size: 0.75rem;
       }
       .troy-crm-history-intent {
         padding: 0.1rem 0.4rem;
-        border-radius: 3px;
+        border-radius: 10px;
         font-weight: 600;
         text-transform: uppercase;
         font-size: 0.6rem;
       }
       .troy-crm-history-intent.sale {
-        background: #10b98120;
+        background: rgba(16, 185, 129, 0.12);
         color: #10b981;
       }
       .troy-crm-history-intent.support {
-        background: #f5970b20;
-        color: #f5970b;
+        background: rgba(245, 158, 11, 0.12);
+        color: #f59e0b;
       }
       .troy-crm-history-intent.info {
-        background: #3b82f620;
+        background: rgba(59, 130, 246, 0.12);
         color: #3b82f6;
       }
       .troy-crm-history-intent.browsing {
-        background: #6b728020;
+        background: rgba(107, 114, 128, 0.12);
         color: #6b7280;
       }
       .troy-crm-history-time {
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
       }
       .troy-crm-history-products {
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         font-style: italic;
       }
       .troy-crm-empty {
         text-align: center;
         padding: 2rem;
-        color: var(--text-muted, #999);
+        color: var(--tv-text-muted);
         font-size: 0.85rem;
+      }
+
+      /* Responsive */
+      @media (max-width: 600px) {
+        .troy-crm-kpis {
+          grid-template-columns: 1fr 1fr;
+        }
+        .troy-crm-kpi {
+          padding: 1rem;
+        }
+        .troy-crm-kpi-value {
+          font-size: 1.2rem;
+        }
+        .troy-crm-search {
+          font-size: 16px; /* prevents iOS zoom */
+        }
+        .wa-btn-primary {
+          min-height: 44px;
+        }
       }
     </style>
   `;

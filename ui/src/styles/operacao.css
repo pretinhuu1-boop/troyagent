@@ -1,35 +1,87 @@
 /* ══════════════════════════════════════════════════════════
    Troy Vape – Operação Panel Styles
-   Lime/black neo-brutalist theme for Vendas + Catálogo tabs
+   Lime/black luxe theme · Glassmorphism + Glow effects
+   Adapted from canvas-host original design
    ══════════════════════════════════════════════════════════ */
 
-/* ── Variables — NEO-BRUTALISM ─────────────────────────────── */
+/* ── Variables ─────────────────────────────────── */
 :root {
-  --tv-gold: var(--accent);
-  --tv-gold-light: var(--accent-hover);
-  --tv-gold-dark: #65a30d;
-  --tv-bg-card: var(--card);
-  --tv-bg-card-hover: var(--bg-hover);
-  --tv-border: var(--border);
+  --tv-lime: var(--accent);
+  --tv-lime-light: var(--accent-hover);
+  --tv-lime-dark: #65a30d;
+  --tv-bg-card: rgba(255, 255, 255, 0.03);
+  --tv-bg-card-hover: rgba(163, 230, 53, 0.03);
+  --tv-border: rgba(163, 230, 53, 0.15);
+  --tv-border-strong: rgba(163, 230, 53, 0.3);
   --tv-text: var(--text);
   --tv-text-muted: var(--muted);
   --tv-success: var(--ok);
   --tv-warning: var(--warn);
   --tv-danger: var(--danger);
-  --tv-radius: 0px;
-  --tv-input-bg: var(--card);
-  --tv-btn-sm-bg: var(--secondary);
-  --tv-btn-sm-border: var(--border);
+  --tv-radius: 14px;
+  --tv-input-bg: rgba(255, 255, 255, 0.04);
+  --tv-btn-sm-bg: transparent;
+  --tv-btn-sm-border: var(--tv-border);
+  --tv-glow: rgba(163, 230, 53, 0.08);
 }
 
-/* ── Dashboard Layout ──────────────────────────────────────── */
+/* ── Keyframes ──────────────────────────────────── */
+@keyframes tv-fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tv-cardIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes tv-newOrderPulse {
+  0% { background: rgba(163, 230, 53, 0.15); }
+  100% { background: transparent; }
+}
+
+@keyframes tv-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Gradient Text (like canvas .gold-text) ─────── */
+.tv-lime-text {
+  color: var(--tv-lime);
+  background: linear-gradient(135deg, var(--tv-lime), var(--tv-lime-light));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Dashboard Layout ──────────────────────────── */
 .tv-dashboard,
-.tv-catalogo {
+.tv-catalogo,
+.tv-crm {
   display: flex;
   flex-direction: column;
-  gap: 1.2rem;
+  gap: 1.5rem;
   max-width: 1400px;
   padding: 0.5rem 0;
+  position: relative;
+}
+
+/* Subtle background glow (like canvas .background-effects) */
+.tv-dashboard::before,
+.tv-catalogo::before {
+  content: "";
+  position: fixed;
+  top: -15%;
+  right: -10%;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: var(--tv-lime);
+  filter: blur(180px);
+  opacity: 0.04;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .tv-date {
@@ -38,54 +90,61 @@
   text-transform: capitalize;
 }
 
-/* ── KPI Grid ──────────────────────────────────────────────── */
+/* ── KPI Grid ──────────────────────────────────── */
 .tv-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
 }
 
 .tv-kpi {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
   background: var(--tv-bg-card);
-  border: var(--border-width) solid var(--tv-border);
+  border: 1px solid var(--tv-border);
   border-radius: var(--tv-radius);
-  padding: 1rem 1.2rem;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform 0.1s,
-    box-shadow 0.1s;
+  padding: 1.25rem 1.5rem;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
 }
 
 .tv-kpi:hover {
-  box-shadow: var(--shadow-md);
-  transform: translate(-2px, -2px);
+  border-color: var(--tv-lime);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px var(--tv-glow);
 }
 
 .tv-kpi-icon {
-  font-size: 1.6rem;
+  font-size: 2rem;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(163, 230, 53, 0.08);
+  border-radius: 14px;
+  flex-shrink: 0;
 }
 
 .tv-kpi-value {
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  color: var(--tv-gold);
+  color: var(--tv-lime-light);
+  line-height: 1.2;
 }
 
 .tv-kpi-label {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--tv-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  margin-top: 4px;
 }
 
-/* ── Content Grid (orders + feed) ──────────────────────────── */
+/* ── Content Grid (orders + feed) ────────────── */
 .tv-content-grid {
   display: grid;
-  grid-template-columns: 1.6fr 1fr;
-  gap: 1rem;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.25rem;
 }
 
 @media (max-width: 900px) {
@@ -94,22 +153,20 @@
   }
 }
 
-/* ── Panel ─────────────────────────────────────────────────── */
+/* ── Panel (glassmorphism) ────────────────────── */
 .tv-panel {
   background: var(--tv-bg-card);
-  border: var(--border-width) solid var(--tv-border);
+  border: 1px solid var(--tv-border);
   border-radius: var(--tv-radius);
-  padding: 1rem 1.2rem;
-  box-shadow: var(--shadow-md);
+  padding: 1.5rem;
+  backdrop-filter: blur(8px);
 }
 
 .tv-panel h3 {
-  margin: 0 0 0.75rem;
-  font-size: 0.85rem;
-  font-weight: 800;
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
   color: var(--text-strong);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .tv-panel-header {
@@ -117,7 +174,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
 }
 
@@ -125,7 +182,7 @@
   margin: 0;
 }
 
-/* ── Table ──────────────────────────────────────────────────── */
+/* ── Table ──────────────────────────────────────── */
 .tv-table-wrap {
   overflow-x: auto;
 }
@@ -133,39 +190,50 @@
 .tv-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
 }
 
 .tv-table th {
   text-align: left;
-  padding: 0.5rem 0.6rem;
-  border-bottom: var(--border-width) solid var(--tv-border);
+  padding: 10px 12px;
   color: var(--tv-text-muted);
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 0.8rem;
   text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
-  font-family: var(--mono);
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--tv-border);
+  white-space: nowrap;
 }
 
 .tv-table td {
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--tv-border);
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  vertical-align: middle;
   color: var(--tv-text);
 }
 
+.tv-order-row {
+  transition: background 0.2s;
+}
+
 .tv-order-row:hover {
-  background: var(--accent-subtle);
+  background: var(--tv-bg-card-hover);
+}
+
+.tv-order-row.tv-new-order {
+  animation: tv-newOrderPulse 2s ease;
 }
 
 .tv-order-id {
   font-family: monospace;
-  font-size: 0.78rem;
-  color: var(--tv-gold);
+  color: var(--tv-lime);
+  font-weight: 600;
+  font-size: 0.85rem;
 }
 
 .tv-order-total {
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--tv-lime-light);
 }
 
 .tv-products-cell {
@@ -173,142 +241,148 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--tv-text-muted);
 }
 
 .tv-empty {
   text-align: center;
+  padding: 40px 0;
   color: var(--tv-text-muted);
-  padding: 1.5rem 0;
-  font-style: italic;
+  font-size: 0.9rem;
 }
 
-/* ── Badges ────────────────────────────────────────────────── */
+/* ── Badges ────────────────────────────────────── */
 .tv-badge {
   display: inline-block;
-  padding: 0.15rem 0.5rem;
-  border-radius: 0;
-  font-size: 0.68rem;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border: 1px solid currentColor;
+  letter-spacing: 0.5px;
 }
 
 .tv-badge--novo {
-  background: rgba(255, 152, 0, 0.15);
-  color: var(--tv-warning);
+  background: rgba(52, 152, 219, 0.15);
+  color: #3498db;
+  border: 1px solid rgba(52, 152, 219, 0.3);
 }
 
 .tv-badge--pago {
-  background: rgba(76, 175, 80, 0.15);
-  color: var(--tv-success);
+  background: rgba(243, 156, 18, 0.15);
+  color: var(--tv-warning);
+  border: 1px solid rgba(243, 156, 18, 0.3);
 }
 
 .tv-badge--separado {
-  background: rgba(33, 150, 243, 0.15);
-  color: #42a5f5;
+  background: rgba(46, 204, 113, 0.15);
+  color: var(--tv-success);
+  border: 1px solid rgba(46, 204, 113, 0.3);
 }
 
 .tv-badge--enviado {
-  background: rgba(212, 175, 55, 0.15);
-  color: var(--tv-gold);
+  background: rgba(163, 230, 53, 0.15);
+  color: var(--tv-lime);
+  border: 1px solid var(--tv-border);
 }
 
 .tv-badge--category {
-  background: rgba(212, 175, 55, 0.12);
-  color: var(--tv-gold-light);
+  background: rgba(163, 230, 53, 0.12);
+  color: var(--tv-lime-light);
+  border: 1px solid var(--tv-border);
 }
 
-/* ── Feed ──────────────────────────────────────────────────── */
+/* ── Feed ──────────────────────────────────────── */
 .tv-feed {
-  max-height: 340px;
+  max-height: 400px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(163, 230, 53, 0.2) transparent;
 }
 
 .tv-feed-item {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 0;
-  font-size: 0.8rem;
-  color: var(--tv-text);
-  border-left: 3px solid transparent;
-  transition:
-    background 0.1s,
-    border-color 0.1s;
-}
-
-.tv-feed-item:hover {
-  background: var(--accent-subtle);
-  border-left-color: var(--accent);
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  font-size: 0.85rem;
+  animation: tv-fadeIn 0.3s ease;
 }
 
 .tv-feed-item--latest {
-  background: var(--accent-subtle);
-  border-left-color: var(--accent);
+  background: rgba(163, 230, 53, 0.03);
+  padding: 10px 8px;
+  border-radius: 8px;
+  margin-bottom: 4px;
 }
 
 .tv-feed-icon {
-  font-size: 1rem;
+  font-size: 1.1rem;
   flex-shrink: 0;
-  margin-top: 0.1rem;
+  margin-top: 1px;
 }
 
 .tv-feed-msg {
-  flex: 1;
+  flex-grow: 1;
+  line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .tv-feed-time {
-  font-size: 0.7rem;
   color: var(--tv-text-muted);
+  font-size: 0.75rem;
   flex-shrink: 0;
-  margin-top: 0.15rem;
+  white-space: nowrap;
 }
 
-/* ── Metrics ───────────────────────────────────────────────── */
+/* ── Metrics ───────────────────────────────────── */
 .tv-metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
 .tv-metric {
-  text-align: center;
-  padding: 0.6rem;
-  border: var(--border-width) solid var(--tv-border);
-  border-radius: 0;
-  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.3s ease;
+}
+
+.tv-metric:hover {
+  border-color: var(--tv-border);
 }
 
 .tv-metric-label {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--tv-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.3rem;
+  text-align: center;
 }
 
 .tv-metric-value {
-  font-size: 1.3rem;
+  font-size: 1.6rem;
   font-weight: 700;
   color: var(--tv-text);
 }
 
-.tv-gold {
-  color: var(--tv-gold) !important;
+.tv-gold,
+.tv-lime {
+  color: var(--tv-lime-light) !important;
 }
 
-/* ── Settings Cards Grid ─────────────────────────────────── */
+/* ── Settings Cards Grid ─────────────────────── */
 .tv-settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 @media (max-width: 800px) {
@@ -319,21 +393,17 @@
 
 .tv-settings-card {
   background: var(--tv-bg-card);
-  border: var(--border-width) solid var(--tv-border);
-  border-radius: 0;
+  border: 1px solid var(--tv-border);
+  border-radius: var(--tv-radius);
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  box-shadow: var(--shadow-md);
-  transition:
-    transform 0.1s,
-    box-shadow 0.1s;
+  transition: border-color 0.2s;
 }
 
 .tv-settings-card:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--tv-border-strong);
 }
 
 .tv-settings-card-header {
@@ -346,7 +416,7 @@
   font-size: 1.6rem;
   line-height: 1;
   flex-shrink: 0;
-  margin-top: 0.1rem;
+  margin-top: 2px;
 }
 
 .tv-settings-card-title {
@@ -360,23 +430,23 @@
 .tv-settings-card-desc {
   font-size: 0.72rem;
   color: var(--tv-text-muted);
-  margin: 0.15rem 0 0;
+  margin: 2px 0 0;
   line-height: 1.3;
 }
 
 .tv-settings-card-body {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.75rem;
 }
 
 .tv-settings-card-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.65rem;
+  gap: 0.75rem;
 }
 
-/* ── Config Fields (shared by vendas + catalogo form) ────── */
+/* ── Config Fields ─────────────────────────────── */
 .tv-config-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -392,42 +462,44 @@
 
 .tv-config-field label {
   display: block;
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 600;
   color: var(--tv-text-muted);
-  margin-bottom: 0.3rem;
-  letter-spacing: 0.06em;
   text-transform: uppercase;
-  font-family: var(--mono);
+  letter-spacing: 0.3px;
+  margin-bottom: 5px;
 }
 
 .tv-config-field input,
 .tv-config-field textarea,
 .tv-config-field select {
   width: 100%;
-  padding: 0.55rem 0.75rem;
+  padding: 10px 12px;
   background: var(--tv-input-bg);
-  border: var(--border-width) solid var(--tv-border);
-  border-radius: 0;
+  border: 1px solid var(--tv-border);
+  border-radius: 8px;
   color: var(--tv-text);
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   font-family: inherit;
-  transition:
-    border-color 0.1s,
-    box-shadow 0.1s;
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
   box-sizing: border-box;
 }
 
 .tv-config-field input:focus,
 .tv-config-field textarea:focus,
 .tv-config-field select:focus {
-  outline: none;
-  border-color: var(--tv-gold);
-  box-shadow: var(--focus-ring);
+  border-color: var(--tv-lime);
+  box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.12);
+}
+
+.tv-config-field input::placeholder {
+  color: var(--tv-text-muted);
+  opacity: 0.5;
 }
 
 .tv-config-field select option {
-  background: var(--card);
+  background: #0a0a0a;
   color: var(--tv-text);
 }
 
@@ -441,146 +513,222 @@
 
 .tv-hint {
   display: block;
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   color: var(--tv-text-muted);
-  margin-top: 0.2rem;
-  opacity: 0.7;
+  opacity: 0.6;
+  margin-top: 3px;
 }
 
 .tv-config-actions {
   display: flex;
-  gap: 0.6rem;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
-/* ── Buttons ───────────────────────────────────────────────── */
-.tv-btn-gold {
-  padding: 0.5rem 1.2rem;
-  background: var(--accent);
-  color: var(--accent-foreground);
-  border: var(--border-width) solid var(--border);
-  border-radius: 0;
+/* ── Buttons ───────────────────────────────────── */
+.tv-btn-gold,
+.tv-btn-lime {
+  background: linear-gradient(135deg, var(--tv-lime), var(--tv-lime-light));
+  color: #0a0a0a;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 10px;
   font-weight: 700;
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 0.9rem;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform 0.1s,
-    box-shadow 0.1s;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.tv-btn-gold:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: var(--shadow-md);
+.tv-btn-gold:hover,
+.tv-btn-lime:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(163, 230, 53, 0.3);
+}
+
+.tv-btn-gold:active,
+.tv-btn-lime:active {
+  transform: translateY(0);
 }
 
 .tv-btn-outline {
-  padding: 0.5rem 1.2rem;
   background: transparent;
-  color: var(--text-strong);
-  border: var(--border-width) solid var(--border);
-  border-radius: 0;
-  font-weight: 700;
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  border: 1px solid var(--tv-border);
+  color: var(--tv-text);
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 0.85rem;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform 0.1s,
-    box-shadow 0.1s;
+  font-family: inherit;
+  transition: all 0.3s ease;
 }
 
 .tv-btn-outline:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: var(--shadow-md);
+  border-color: var(--tv-lime);
+  color: var(--tv-lime);
 }
 
 .tv-btn-sm {
-  padding: 0.3rem 0.7rem;
-  background: var(--tv-btn-sm-bg);
-  color: var(--tv-text);
-  border: var(--border-width) solid var(--tv-btn-sm-border);
-  border-radius: 0;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--tv-border);
+  color: var(--tv-text-muted);
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
   cursor: pointer;
-  box-shadow: 2px 2px 0px 0px rgba(0, 0, 0, 1);
-  transition:
-    transform 0.1s,
-    box-shadow 0.1s;
+  transition: all 0.2s;
+  font-family: inherit;
 }
 
 .tv-btn-sm:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 3px 3px 0px 0px rgba(0, 0, 0, 1);
+  border-color: var(--tv-lime);
+  color: var(--tv-lime);
 }
 
 .tv-btn-sm--danger:hover {
-  background: rgba(229, 57, 53, 0.15);
   border-color: var(--tv-danger);
   color: var(--tv-danger);
 }
 
 .tv-btn-danger {
-  padding: 0.4rem 1rem;
-  background: var(--danger-subtle);
-  color: var(--tv-danger);
-  border: var(--border-width) solid var(--border);
-  border-radius: 0;
-  font-weight: 700;
-  font-size: 0.8rem;
-  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--tv-border);
+  color: var(--tv-text-muted);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform 0.1s,
-    box-shadow 0.1s;
+  transition: all 0.2s;
+  font-family: inherit;
 }
 
 .tv-btn-danger:hover {
-  background: var(--danger);
-  color: white;
-  transform: translate(-2px, -2px);
-  box-shadow: var(--shadow-md);
+  border-color: var(--tv-danger);
+  color: var(--tv-danger);
 }
 
 .tv-saved-badge {
-  display: inline-block;
-  padding: 0.2rem 0.6rem;
-  background: var(--ok-subtle);
+  background: rgba(46, 204, 113, 0.12);
   color: var(--tv-success);
-  border: 1px solid currentColor;
-  border-radius: 0;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid rgba(46, 204, 113, 0.25);
+  animation: tv-fadeIn 0.3s ease;
 }
 
-/* ── Select ────────────────────────────────────────────────── */
+/* ── Select ────────────────────────────────────── */
 .tv-select {
-  padding: 0.3rem 0.6rem;
-  background: var(--tv-input-bg);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--tv-border);
   color: var(--tv-text);
-  border: var(--border-width) solid var(--tv-border);
-  border-radius: 0;
-  font-size: 0.78rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  outline: none;
   cursor: pointer;
+  font-family: inherit;
+}
+
+.tv-select option {
+  background: #0a0a0a;
+  color: #fff;
 }
 
 .tv-select:focus {
-  outline: none;
-  border-color: var(--tv-gold);
-  box-shadow: var(--focus-ring);
+  border-color: var(--tv-lime);
+  box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.12);
 }
 
-/* ── Catálogo: Product Grid ────────────────────────────────── */
+/* ── Catálogo: Category Bar (like canvas .category-bar) ── */
+.tv-category-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.tv-category-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.tv-cat-btn {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  border: 1px solid var(--tv-border);
+  border-radius: 25px;
+  background: transparent;
+  color: var(--tv-text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tv-cat-btn:hover {
+  border-color: var(--tv-lime);
+  color: var(--tv-text);
+}
+
+.tv-cat-btn.active {
+  background: linear-gradient(135deg, var(--tv-lime), var(--tv-lime-light));
+  color: #0a0a0a;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.tv-cat-count {
+  background: rgba(0, 0, 0, 0.15);
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+}
+
+.tv-cat-btn.active .tv-cat-count {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ── Catálogo: Search Bar ──────────────────────── */
+.tv-search-bar {
+  max-width: 500px;
+}
+
+.tv-search-bar input {
+  width: 100%;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--tv-border);
+  border-radius: 12px;
+  color: var(--tv-text);
+  font-size: 0.95rem;
+  outline: none;
+  transition: all 0.3s ease;
+  font-family: inherit;
+}
+
+.tv-search-bar input::placeholder {
+  color: var(--tv-text-muted);
+}
+
+.tv-search-bar input:focus {
+  border-color: var(--tv-lime);
+  background: rgba(163, 230, 53, 0.05);
+  box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.08);
+}
+
+/* ── Catálogo: Product Grid ────────────────────── */
 .tv-product-count,
 .tv-category-count {
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   color: var(--tv-text-muted);
 }
 
@@ -596,19 +744,16 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  background: var(--danger-subtle);
-  border: var(--border-width) solid var(--tv-danger);
-  border-radius: 0;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 12px;
   font-size: 0.85rem;
-  font-weight: 700;
-  text-transform: uppercase;
+  font-weight: 600;
   flex-wrap: wrap;
 }
 
 .tv-form-panel {
-  border-color: var(--tv-gold);
-  border-width: var(--border-width);
-  box-shadow: var(--shadow-md);
+  border-color: var(--tv-lime) !important;
 }
 
 .tv-form-grid {
@@ -622,7 +767,6 @@
   .tv-form-grid {
     grid-template-columns: 1fr;
   }
-
   .tv-form-grid [style*="grid-column: span 2"] {
     grid-column: span 1;
   }
@@ -631,34 +775,45 @@
 .tv-product-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .tv-product-card {
   background: var(--tv-bg-card);
-  border: var(--border-width) solid var(--tv-border);
-  border-radius: var(--tv-radius);
+  border: 1px solid var(--tv-border);
+  border-radius: 20px;
   overflow: hidden;
-  box-shadow: var(--shadow-md);
-  transition:
-    transform 0.1s,
-    box-shadow 0.1s;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  animation: tv-cardIn 0.4s ease backwards;
 }
 
+.tv-product-card:nth-child(1) { animation-delay: 0.05s; }
+.tv-product-card:nth-child(2) { animation-delay: 0.1s; }
+.tv-product-card:nth-child(3) { animation-delay: 0.15s; }
+.tv-product-card:nth-child(4) { animation-delay: 0.2s; }
+.tv-product-card:nth-child(5) { animation-delay: 0.25s; }
+.tv-product-card:nth-child(6) { animation-delay: 0.3s; }
+
 .tv-product-card:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--tv-lime);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px var(--tv-glow);
 }
 
 .tv-product-img {
-  height: 140px;
+  height: 160px;
   background-size: cover;
   background-position: center;
-  background-color: rgba(212, 175, 55, 0.05);
+  background-color: rgba(163, 230, 53, 0.04);
 }
 
 .tv-product-body {
-  padding: 0.8rem 1rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .tv-product-header {
@@ -666,11 +821,10 @@
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.3rem;
 }
 
 .tv-product-header strong {
-  font-size: 0.95rem;
+  font-size: 1rem;
   color: var(--tv-text);
 }
 
@@ -678,42 +832,123 @@
   font-family: monospace;
   font-size: 0.72rem;
   color: var(--tv-text-muted);
-  margin-bottom: 0.3rem;
 }
 
 .tv-product-desc {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   color: var(--tv-text-muted);
-  margin-bottom: 0.4rem;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .tv-product-price {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   font-weight: 700;
-  color: var(--tv-gold);
-  margin-bottom: 0.5rem;
+  color: var(--tv-lime-light);
 }
 
 .tv-product-flavors {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-bottom: 0.6rem;
+  gap: 6px;
 }
 
 .tv-flavor-tag {
-  padding: 0.12rem 0.45rem;
-  background: var(--accent-subtle);
-  color: var(--tv-gold);
-  border: 1px solid currentColor;
-  border-radius: 0;
-  font-size: 0.68rem;
+  padding: 3px 10px;
+  background: rgba(163, 230, 53, 0.08);
+  color: var(--tv-lime);
+  border: 1px solid var(--tv-border);
+  border-radius: 20px;
+  font-size: 0.72rem;
   font-weight: 600;
-  text-transform: uppercase;
 }
 
 .tv-product-actions {
   display: flex;
-  gap: 0.4rem;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+/* ── CRM specific ──────────────────────────────── */
+.tv-crm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.tv-crm-stats {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.tv-crm-stat {
+  text-align: center;
+}
+
+.tv-crm-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--tv-lime-light);
+}
+
+.tv-crm-stat-label {
+  font-size: 0.75rem;
+  color: var(--tv-text-muted);
+}
+
+/* ── Responsive ────────────────────────────────── */
+@media (max-width: 900px) {
+  .tv-content-grid {
+    grid-template-columns: 1fr;
+  }
+  .tv-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .tv-settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .tv-kpi-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .tv-kpi {
+    padding: 16px;
+    flex-direction: column;
+    text-align: center;
+  }
+  .tv-kpi-value {
+    font-size: 1.2rem;
+  }
+  .tv-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .tv-panel {
+    padding: 16px;
+  }
+  .tv-settings-card-row {
+    grid-template-columns: 1fr;
+  }
+  .tv-config-field input,
+  .tv-config-field select {
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+  .tv-btn-gold,
+  .tv-btn-lime,
+  .tv-btn-outline,
+  .tv-btn-sm {
+    min-height: 44px; /* touch target */
+  }
+  .tv-table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+  .tv-select {
+    font-size: 16px; /* prevents iOS zoom */
+  }
+  .tv-product-grid {
+    grid-template-columns: 1fr;
+  }
 }
