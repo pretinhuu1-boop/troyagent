@@ -24,6 +24,7 @@ type LifecycleHost = {
   client?: { stop: () => void } | null;
   connected?: boolean;
   tab: Tab;
+  chatPanelOpen: boolean;
   assistantName: string;
   assistantAvatar: string | null;
   assistantAgentId: string | null;
@@ -76,23 +77,24 @@ export function handleDisconnected(host: LifecycleHost) {
 }
 
 export function handleUpdated(host: LifecycleHost, changed: Map<PropertyKey, unknown>) {
-  if (host.tab === "chat" && host.chatManualRefreshInFlight) {
+  // Chat panel is now a persistent sidebar — gate scroll on chatPanelOpen instead of tab
+  if (host.chatPanelOpen && host.chatManualRefreshInFlight) {
     return;
   }
   if (
-    host.tab === "chat" &&
+    host.chatPanelOpen &&
     (changed.has("chatMessages") ||
       changed.has("chatToolMessages") ||
       changed.has("chatStream") ||
       changed.has("chatLoading") ||
-      changed.has("tab"))
+      changed.has("chatPanelOpen"))
   ) {
-    const forcedByTab = changed.has("tab");
+    const forcedByPanel = changed.has("chatPanelOpen");
     const forcedByLoad =
       changed.has("chatLoading") && changed.get("chatLoading") === true && !host.chatLoading;
     scheduleChatScroll(
       host as unknown as Parameters<typeof scheduleChatScroll>[0],
-      forcedByTab || forcedByLoad || !host.chatHasAutoScrolled,
+      forcedByPanel || forcedByLoad || !host.chatHasAutoScrolled,
     );
   }
   if (

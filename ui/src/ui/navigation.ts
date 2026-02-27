@@ -3,7 +3,6 @@ import type { IconName } from "./icons.js";
 
 export const TAB_GROUPS = [
   { label: "operacao", tabs: ["vendas", "catalogo", "crm"] },
-  { label: "chat", tabs: ["chat"] },
   {
     label: "control",
     tabs: ["overview", "channels", "instances", "sessions", "usage", "cron"],
@@ -103,7 +102,7 @@ export function tabFromPath(pathname: string, basePath = ""): Tab | null {
     normalized = "/";
   }
   if (normalized === "/") {
-    return "chat";
+    return "vendas";
   }
   return PATH_TO_TAB.get(normalized) ?? null;
 }

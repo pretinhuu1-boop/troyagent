@@ -49,6 +49,7 @@ type SettingsHost = {
   tab: Tab;
   connected: boolean;
   chatHasAutoScrolled: boolean;
+  chatPanelOpen: boolean;
   logsAtBottom: boolean;
   eventLog: unknown[];
   eventLogBuffer: unknown[];
@@ -149,11 +150,19 @@ export function applySettingsFromUrl(host: SettingsHost) {
 }
 
 export function setTab(host: SettingsHost, next: Tab) {
+  // Intercept chat tab — open side panel instead of switching page
+  if (next === "chat") {
+    if (!host.chatPanelOpen) {
+      host.chatPanelOpen = true;
+      applySettings(host, { ...host.settings, chatPanelOpen: true });
+    }
+    host.chatHasAutoScrolled = false;
+    // Trigger chat refresh when panel opens
+    void refreshActiveTab(host);
+    return;
+  }
   if (host.tab !== next) {
     host.tab = next;
-  }
-  if (next === "chat") {
-    host.chatHasAutoScrolled = false;
   }
   if (next === "logs") {
     startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
@@ -231,7 +240,8 @@ export async function refreshActiveTab(host: SettingsHost) {
     await loadConfig(host as unknown as OpenClawApp);
     await loadExecApprovals(host as unknown as OpenClawApp);
   }
-  if (host.tab === "chat") {
+  // Chat panel is now a persistent sidebar — refresh when panel is open (any tab)
+  if (host.chatPanelOpen) {
     await refreshChat(host as unknown as Parameters<typeof refreshChat>[0]);
     scheduleChatScroll(
       host as unknown as Parameters<typeof scheduleChatScroll>[0],
@@ -320,7 +330,16 @@ export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
   if (typeof window === "undefined") {
     return;
   }
-  const resolved = tabFromPath(window.location.pathname, host.basePath) ?? "chat";
+  const resolved = tabFromPath(window.location.pathname, host.basePath) ?? "vendas";
+  // If URL points to /chat, redirect to vendas and open panel
+  if (resolved === "chat") {
+    host.chatPanelOpen = true;
+    applySettings(host, { ...host.settings, chatPanelOpen: true });
+    host.chatHasAutoScrolled = false;
+    setTabFromRoute(host, "vendas");
+    syncUrlWithTab(host, "vendas", true);
+    return;
+  }
   setTabFromRoute(host, resolved);
   syncUrlWithTab(host, resolved, replace);
 }
@@ -343,6 +362,18 @@ export function onPopState(host: SettingsHost) {
       sessionKey: session,
       lastActiveSessionKey: session,
     });
+  }
+
+  // /chat URL → open panel, stay on current page
+  if (resolved === "chat") {
+    if (!host.chatPanelOpen) {
+      host.chatPanelOpen = true;
+      applySettings(host, { ...host.settings, chatPanelOpen: true });
+    }
+    host.chatHasAutoScrolled = false;
+    // Redirect URL to vendas
+    syncUrlWithTab(host, host.tab || "vendas", true);
+    return;
   }
 
   setTabFromRoute(host, resolved);

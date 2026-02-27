@@ -154,8 +154,6 @@ export function renderApp(state: AppViewState) {
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
   const chatDisabledReason = state.connected ? null : t("chat.disconnected");
-  const isChat = state.tab === "chat";
-  const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
   const assistantAvatarUrl = resolveAssistantAvatarUrl(state);
   const chatAvatarUrl = state.chatAvatarUrl ?? assistantAvatarUrl ?? null;
@@ -219,7 +217,7 @@ export function renderApp(state: AppViewState) {
       : rawDeliveryToSuggestions;
 
   return html`
-    <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
+    <div class="shell ${state.chatPanelOpen ? "shell--chat-panel" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">${""}
       <header class="topbar">
         <div class="topbar-left">
           <button
@@ -255,6 +253,21 @@ export function renderApp(state: AppViewState) {
             <span>${t("common.health")}</span>
             <span class="mono">${state.connected ? t("common.ok") : t("common.offline")}</span>
           </div>
+          <button
+            class="btn btn--sm btn--icon chat-panel-toggle ${state.chatPanelOpen ? "active" : ""}"
+            @click=${() => state.toggleChatPanel()}
+            title="Chat"
+            aria-label="Toggle chat panel"
+          >
+            ${icons.messageSquare}
+            ${
+              state.chatRunId
+                ? html`
+                    <span class="chat-panel-toggle__dot"></span>
+                  `
+                : nothing
+            }
+          </button>
           ${renderThemeToggle(state)}
         </div>
       </header>
@@ -303,7 +316,7 @@ export function renderApp(state: AppViewState) {
           </div>
         </div>
       </aside>
-      <main class="content ${isChat ? "content--chat" : ""}">
+      <main class="content">
         ${
           availableUpdate
             ? html`<div class="update-banner callout danger" role="alert">
@@ -324,7 +337,6 @@ export function renderApp(state: AppViewState) {
           </div>
           <div class="page-meta">
             ${state.lastError ? html`<div class="pill danger">${state.lastError}</div>` : nothing}
-            ${isChat ? renderChatControls(state) : nothing}
           </div>
         </section>
 
@@ -975,86 +987,6 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "chat"
-            ? renderChat({
-                sessionKey: state.sessionKey,
-                onSessionKeyChange: (next) => {
-                  state.sessionKey = next;
-                  state.chatMessage = "";
-                  state.chatAttachments = [];
-                  state.chatStream = null;
-                  state.chatStreamStartedAt = null;
-                  state.chatRunId = null;
-                  state.chatQueue = [];
-                  state.resetToolStream();
-                  state.resetChatScroll();
-                  state.applySettings({
-                    ...state.settings,
-                    sessionKey: next,
-                    lastActiveSessionKey: next,
-                  });
-                  void state.loadAssistantIdentity();
-                  void loadChatHistory(state);
-                  void refreshChatAvatar(state);
-                },
-                thinkingLevel: state.chatThinkingLevel,
-                showThinking,
-                loading: state.chatLoading,
-                sending: state.chatSending,
-                compactionStatus: state.compactionStatus,
-                fallbackStatus: state.fallbackStatus,
-                assistantAvatarUrl: chatAvatarUrl,
-                messages: state.chatMessages,
-                toolMessages: state.chatToolMessages,
-                stream: state.chatStream,
-                streamStartedAt: state.chatStreamStartedAt,
-                draft: state.chatMessage,
-                queue: state.chatQueue,
-                connected: state.connected,
-                canSend: state.connected,
-                disabledReason: chatDisabledReason,
-                error: state.lastError,
-                sessions: state.sessionsResult,
-                focusMode: chatFocus,
-                onRefresh: () => {
-                  state.resetToolStream();
-                  return Promise.all([loadChatHistory(state), refreshChatAvatar(state)]);
-                },
-                onToggleFocusMode: () => {
-                  if (state.onboarding) {
-                    return;
-                  }
-                  state.applySettings({
-                    ...state.settings,
-                    chatFocusMode: !state.settings.chatFocusMode,
-                  });
-                },
-                onChatScroll: (event) => state.handleChatScroll(event),
-                onDraftChange: (next) => (state.chatMessage = next),
-                attachments: state.chatAttachments,
-                onAttachmentsChange: (next) => (state.chatAttachments = next),
-                onSend: () => state.handleSendChat(),
-                canAbort: Boolean(state.chatRunId),
-                onAbort: () => void state.handleAbortChat(),
-                onQueueRemove: (id) => state.removeQueuedMessage(id),
-                onNewSession: () => state.handleSendChat("/new", { restoreDraft: true }),
-                showNewMessages: state.chatNewMessagesBelow && !state.chatManualRefreshInFlight,
-                onScrollToBottom: () => state.scrollToBottom(),
-                // Sidebar props for tool output viewing
-                sidebarOpen: state.sidebarOpen,
-                sidebarContent: state.sidebarContent,
-                sidebarError: state.sidebarError,
-                splitRatio: state.splitRatio,
-                onOpenSidebar: (content: string) => state.handleOpenSidebar(content),
-                onCloseSidebar: () => state.handleCloseSidebar(),
-                onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
-                assistantName: state.assistantName,
-                assistantAvatar: state.assistantAvatar,
-              })
-            : nothing
-        }
-
-        ${
           state.tab === "config"
             ? renderConfig({
                 raw: state.configRaw,
@@ -1143,6 +1075,102 @@ export function renderApp(state: AppViewState) {
 
         ${state.tab === "crm" ? renderCRM({ state }) : nothing}
       </main>
+
+      ${
+        state.chatPanelOpen
+          ? html`
+        <aside class="chat-panel">
+          <div class="chat-panel__header">
+            <div class="chat-panel__title">
+              ${icons.messageSquare}
+              <span>Chat</span>
+              ${
+                state.chatRunId
+                  ? html`
+                      <span class="chat-panel__live-dot"></span>
+                    `
+                  : nothing
+              }
+            </div>
+            <div class="chat-panel__controls">
+              ${renderChatControls(state)}
+              <button class="btn btn--sm btn--icon" @click=${() => state.toggleChatPanel()} title="Fechar chat" aria-label="Fechar chat">
+                ${icons.x}
+              </button>
+            </div>
+          </div>
+          ${renderChat({
+            sessionKey: state.sessionKey,
+            onSessionKeyChange: (next) => {
+              state.sessionKey = next;
+              state.chatMessage = "";
+              state.chatAttachments = [];
+              state.chatStream = null;
+              state.chatStreamStartedAt = null;
+              state.chatRunId = null;
+              state.chatQueue = [];
+              state.resetToolStream();
+              state.resetChatScroll();
+              state.applySettings({
+                ...state.settings,
+                sessionKey: next,
+                lastActiveSessionKey: next,
+              });
+              void state.loadAssistantIdentity();
+              void loadChatHistory(state);
+              void refreshChatAvatar(state);
+            },
+            thinkingLevel: state.chatThinkingLevel,
+            showThinking,
+            loading: state.chatLoading,
+            sending: state.chatSending,
+            compactionStatus: state.compactionStatus,
+            fallbackStatus: state.fallbackStatus,
+            assistantAvatarUrl: chatAvatarUrl,
+            messages: state.chatMessages,
+            toolMessages: state.chatToolMessages,
+            stream: state.chatStream,
+            streamStartedAt: state.chatStreamStartedAt,
+            draft: state.chatMessage,
+            queue: state.chatQueue,
+            connected: state.connected,
+            canSend: state.connected,
+            disabledReason: chatDisabledReason,
+            error: state.lastError,
+            sessions: state.sessionsResult,
+            focusMode: false,
+            panelMode: true,
+            onRefresh: () => {
+              state.resetToolStream();
+              return Promise.all([loadChatHistory(state), refreshChatAvatar(state)]);
+            },
+            onToggleFocusMode: () => {},
+            onChatScroll: (event) => state.handleChatScroll(event),
+            onDraftChange: (next) => (state.chatMessage = next),
+            attachments: state.chatAttachments,
+            onAttachmentsChange: (next) => (state.chatAttachments = next),
+            onSend: () => state.handleSendChat(),
+            canAbort: Boolean(state.chatRunId),
+            onAbort: () => void state.handleAbortChat(),
+            onQueueRemove: (id) => state.removeQueuedMessage(id),
+            onNewSession: () => state.handleSendChat("/new", { restoreDraft: true }),
+            showNewMessages: state.chatNewMessagesBelow && !state.chatManualRefreshInFlight,
+            onScrollToBottom: () => state.scrollToBottom(),
+            sidebarOpen: state.sidebarOpen,
+            sidebarContent: state.sidebarContent,
+            sidebarError: state.sidebarError,
+            splitRatio: state.splitRatio,
+            onOpenSidebar: (content: string) => state.handleOpenSidebar(content),
+            onCloseSidebar: () => state.handleCloseSidebar(),
+            onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
+            assistantName: state.assistantName,
+            assistantAvatar: state.assistantAvatar,
+          })}
+        </aside>
+      `
+          : nothing
+      }
+
       ${renderExecApprovalPrompt(state)}
       ${renderGatewayUrlConfirmation(state)}
     </div>

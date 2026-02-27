@@ -40,6 +40,23 @@
   }
 }
 
+/* ---- Chat panel: 3-column grid ---- */
+.shell--chat-panel {
+  --shell-chat-panel-width: 400px;
+  grid-template-columns: var(--shell-nav-width) minmax(0, 1fr) var(--shell-chat-panel-width);
+  grid-template-areas:
+    "topbar topbar topbar"
+    "nav content chatpanel";
+}
+
+.shell--chat-panel.shell--nav-collapsed {
+  grid-template-columns: 0px minmax(0, 1fr) var(--shell-chat-panel-width);
+}
+
+.shell--chat-panel.shell--chat-focus {
+  grid-template-columns: 0px minmax(0, 1fr) var(--shell-chat-panel-width);
+}
+
 .shell--nav-collapsed {
   grid-template-columns: 0px minmax(0, 1fr);
 }

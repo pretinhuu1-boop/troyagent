@@ -55,6 +55,8 @@ export type ChatProps = {
   sessions: SessionsListResult | null;
   // Focus mode
   focusMode: boolean;
+  // Panel mode (persistent sidebar)
+  panelMode?: boolean;
   // Sidebar state
   sidebarOpen?: boolean;
   sidebarContent?: string | null;

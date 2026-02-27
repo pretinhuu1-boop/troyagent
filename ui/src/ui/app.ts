@@ -157,6 +157,7 @@ export class OpenClawApp extends LitElement {
   @state() sidebarContent: string | null = null;
   @state() sidebarError: string | null = null;
   @state() splitRatio = this.settings.splitRatio;
+  @state() chatPanelOpen = this.settings.chatPanelOpen;
 
   @state() nodesLoading = false;
   @state() nodes: Array<Record<string, unknown>> = [];
@@ -388,6 +389,13 @@ export class OpenClawApp extends LitElement {
   private themeMedia: MediaQueryList | null = null;
   private themeMediaHandler: ((event: MediaQueryListEvent) => void) | null = null;
   private topbarObserver: ResizeObserver | null = null;
+  private troyNavigateHandler = ((e: Event) => {
+    const detail = (e as CustomEvent).detail;
+    const tab = detail?.tab;
+    if (tab && typeof tab === "string") {
+      this.setTab(tab as Tab);
+    }
+  }) as EventListener;
 
   createRenderRoot() {
     return this;
@@ -396,6 +404,15 @@ export class OpenClawApp extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     handleConnected(this as unknown as Parameters<typeof handleConnected>[0]);
+    // Agent navigation bridge — agent can command page switches
+    document.addEventListener("troy-navigate", this.troyNavigateHandler);
+    // Expose navigation API to canvas/bridge
+    (window as unknown as Record<string, unknown>).troyDashboard = {
+      ...((window as unknown as Record<string, unknown>).troyDashboard as Record<string, unknown>),
+      navigateTo: (tab: string) => {
+        document.dispatchEvent(new CustomEvent("troy-navigate", { detail: { tab } }));
+      },
+    };
   }
 
   protected firstUpdated() {
@@ -403,6 +420,7 @@ export class OpenClawApp extends LitElement {
   }
 
   disconnectedCallback() {
+    document.removeEventListener("troy-navigate", this.troyNavigateHandler);
     handleDisconnected(this as unknown as Parameters<typeof handleDisconnected>[0]);
     super.disconnectedCallback();
   }
@@ -608,6 +626,17 @@ export class OpenClawApp extends LitElement {
     const newRatio = Math.max(0.4, Math.min(0.7, ratio));
     this.splitRatio = newRatio;
     this.applySettings({ ...this.settings, splitRatio: newRatio });
+  }
+
+  toggleChatPanel() {
+    this.chatPanelOpen = !this.chatPanelOpen;
+    this.applySettings({ ...this.settings, chatPanelOpen: this.chatPanelOpen });
+  }
+
+  openChatPanel() {
+    if (!this.chatPanelOpen) {
+      this.toggleChatPanel();
+    }
   }
 
   render() {

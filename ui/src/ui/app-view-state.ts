@@ -79,6 +79,7 @@ export type AppViewState = {
   nodesLoading: boolean;
   nodes: Array<Record<string, unknown>>;
   chatNewMessagesBelow: boolean;
+  chatPanelOpen: boolean;
   sidebarOpen: boolean;
   sidebarContent: string | null;
   sidebarError: string | null;
@@ -319,6 +320,8 @@ export type AppViewState = {
   resetChatScroll: () => void;
   exportLogs: (lines: string[], label: string) => void;
   handleLogsScroll: (event: Event) => void;
+  toggleChatPanel: () => void;
+  openChatPanel: () => void;
   handleOpenSidebar: (content: string) => void;
   handleCloseSidebar: () => void;
   handleSplitRatioChange: (ratio: number) => void;
