@@ -68,7 +68,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   background: var(--panel);
   color: var(--muted);
   font-size: 20px;
@@ -112,7 +112,7 @@
   font-family: var(--font-body);
   color: var(--text);
   background: var(--panel-strong);
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
@@ -160,7 +160,7 @@
   padding: 8px;
   background: var(--panel);
   border-radius: 8px;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   width: fit-content;
   max-width: 100%;
   align-self: flex-start; /* Don't stretch in flex column parent */
@@ -172,7 +172,7 @@
   height: 80px;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   background: var(--bg);
 }
 
@@ -351,7 +351,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -434,7 +434,7 @@
   padding: 4px 10px;
   background: rgba(255, 255, 255, 0.04);
   border-radius: 6px;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
 }
 
 /* Light theme thinking indicator override */

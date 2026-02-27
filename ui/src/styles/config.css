@@ -10,7 +10,7 @@
   height: calc(100vh - 160px);
   margin: -16px;
   border-radius: var(--radius-xl);
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   background: var(--panel);
 }
 
@@ -77,7 +77,7 @@
 .config-search__input {
   width: 100%;
   padding: 11px 36px 11px 42px;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   font-size: 13px;
@@ -148,7 +148,7 @@
 }
 
 .config-search__tag-picker {
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   transition:
@@ -198,7 +198,7 @@
 .config-search__tag-chip {
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-full);
   padding: 2px 7px;
   font-size: 10px;
@@ -333,7 +333,7 @@
   padding: 4px;
   background: var(--bg-elevated);
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
 }
 
 :root[data-theme="light"] .config-mode-toggle {
@@ -670,7 +670,7 @@
 }
 
 .config-section-card {
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   overflow: hidden;
@@ -782,7 +782,7 @@
 .cfg-tag {
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-full);
   padding: 2px 8px;
   font-size: 11px;
@@ -809,7 +809,7 @@
 .cfg-input {
   flex: 1;
   padding: 11px 14px;
-  border: 1px solid var(--border-strong);
+  border: var(--border-width, 2px) solid var(--border-strong);
   border-radius: var(--radius-md);
   background: var(--bg-accent);
   font-size: 14px;
@@ -846,7 +846,7 @@
 
 .cfg-input__reset {
   padding: 10px 14px;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   color: var(--muted);
@@ -871,7 +871,7 @@
 .cfg-textarea {
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid var(--border-strong);
+  border: var(--border-width, 2px) solid var(--border-strong);
   border-radius: var(--radius-md);
   background: var(--bg-accent);
   font-family: var(--mono);
@@ -901,7 +901,7 @@
 /* Number Input */
 .cfg-number {
   display: inline-flex;
-  border: 1px solid var(--border-strong);
+  border: var(--border-width, 2px) solid var(--border-strong);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-accent);
@@ -961,7 +961,7 @@
 /* Select */
 .cfg-select {
   padding: 11px 40px 11px 14px;
-  border: 1px solid var(--border-strong);
+  border: var(--border-width, 2px) solid var(--border-strong);
   border-radius: var(--radius-md);
   background-color: var(--bg-accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
@@ -989,7 +989,7 @@
 .cfg-segmented {
   display: inline-flex;
   padding: 4px;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-accent);
 }
@@ -1035,7 +1035,7 @@
   justify-content: space-between;
   gap: 18px;
   padding: 16px 18px;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-accent);
   cursor: pointer;
@@ -1100,7 +1100,7 @@
   width: 50px;
   height: 28px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
+  border: var(--border-width, 2px) solid var(--border-strong);
   border-radius: var(--radius-full);
   position: relative;
   transition:
@@ -1143,7 +1143,7 @@
 
 /* Object (collapsible) */
 .cfg-object {
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-lg);
   background: transparent;
   overflow: hidden;
@@ -1217,7 +1217,7 @@
 
 /* Array */
 .cfg-array {
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -1265,7 +1265,7 @@
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   color: var(--text);
@@ -1376,7 +1376,7 @@
 
 /* Map (custom entries) */
 .cfg-map {
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -1406,7 +1406,7 @@
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   color: var(--text);
@@ -1447,7 +1447,7 @@
   display: grid;
   gap: 8px;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-accent);
 }

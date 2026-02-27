@@ -1,13 +1,13 @@
 /* ══════════════════════════════════════════════════════════
    Troy Vape – Operação Panel Styles
-   Gold/dark luxe theme for Vendas + Catálogo tabs
+   Lime/black neo-brutalist theme for Vendas + Catálogo tabs
    ══════════════════════════════════════════════════════════ */
 
-/* ── Variables — NEW BRUTALISM ─────────────────────────────── */
+/* ── Variables — NEO-BRUTALISM ─────────────────────────────── */
 :root {
   --tv-gold: var(--accent);
   --tv-gold-light: var(--accent-hover);
-  --tv-gold-dark: #7ccf00;
+  --tv-gold-dark: #65a30d;
   --tv-bg-card: var(--card);
   --tv-bg-card-hover: var(--bg-hover);
   --tv-border: var(--border);

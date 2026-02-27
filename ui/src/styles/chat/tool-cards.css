@@ -1,6 +1,6 @@
 /* Tool Card Styles */
 .chat-tool-card {
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   border-radius: 8px;
   padding: 12px;
   margin-top: 8px;
@@ -134,7 +134,7 @@
   overflow: hidden;
   max-height: 44px;
   line-height: 1.4;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
 }
 
 .chat-tool-card--clickable:hover .chat-tool-card__preview {
@@ -157,7 +157,7 @@
 /* Reading Indicator */
 .chat-reading-indicator {
   background: transparent;
-  border: 1px solid var(--border);
+  border: var(--border-width, 2px) solid var(--border);
   padding: 12px;
   display: inline-flex;
 }
