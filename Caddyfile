@@ -1,0 +1,30 @@
+# Caddyfile for Troy Vape — ecossistematroy.com
+# Auth: cookie-based session gate + basic_auth on verify endpoint only.
+
+ecossistematroy.com {
+    # Auth verify — validates credentials, returns 200 on success
+    @verify path /api/auth/verify
+    handle @verify {
+        basic_auth {
+            NettoManoel $2a$14$apFLzDbn3aZUkUG0w7t2Veo2K2d028lQeooRpoisB4rDtuOThbb0.
+        }
+        respond "OK" 200
+    }
+
+    # Authenticated users (have session cookie) → proxy to gateway
+    @hasSession header_regexp session Cookie troy_session=authenticated
+    handle @hasSession {
+        reverse_proxy openclaw-gateway:18789
+    }
+
+    # Everything else: serve login page (no redirect, just serve the file)
+    handle {
+        root * /srv
+        try_files /login.html
+        file_server
+    }
+}
+
+www.ecossistematroy.com {
+    redir https://ecossistematroy.com{uri} permanent
+}
