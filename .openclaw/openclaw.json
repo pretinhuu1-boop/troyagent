@@ -2,6 +2,7 @@
   "gateway": {
     "controlUi": {
       "allowInsecureAuth": true,
+      "dangerouslyDisableDeviceAuth": true,
       "allowedOrigins": ["https://ecossistematroy.com"]
     },
     "trustedProxies": ["172.28.0.10"]
