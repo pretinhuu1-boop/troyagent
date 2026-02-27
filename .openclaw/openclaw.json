@@ -1,7 +1,8 @@
 {
   "gateway": {
     "controlUi": {
-      "allowInsecureAuth": true
+      "allowInsecureAuth": true,
+      "allowedOrigins": ["https://ecossistematroy.com"]
     },
     "trustedProxies": ["172.28.0.10"]
   },
@@ -21,7 +22,19 @@
     }
   },
   "session": {
-    "dmScope": "per-channel-peer"
+    "dmScope": "per-channel-peer",
+    "reset": {
+      "mode": "daily",
+      "atHour": 4
+    }
+  },
+  "messages": {
+    "inbound": {
+      "debounceMs": 3000
+    }
+  },
+  "commands": {
+    "ownerAllowFrom": ["5511948972837"]
   },
   "agents": {
     "defaults": {
