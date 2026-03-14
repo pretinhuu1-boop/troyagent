@@ -9,7 +9,7 @@ import {
 import { formatForLog } from "../ws-log.js";
 import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 
-const WEB_LOGIN_METHODS = new Set(["web.login.start", "web.login.wait"]);
+const WEB_LOGIN_METHODS = new Set(["web.login.start", "web.login.wait", "web.login.pairing"]);
 
 const resolveWebLoginProvider = () =>
   listChannelPlugins().find((plugin) =>
@@ -69,6 +69,34 @@ export const webHandlers: GatewayRequestHandlers = {
           typeof (params as { timeoutMs?: unknown }).timeoutMs === "number"
             ? (params as { timeoutMs?: number }).timeoutMs
             : undefined,
+        verbose: Boolean((params as { verbose?: boolean }).verbose),
+        accountId,
+      });
+      respond(true, result, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+  "web.login.pairing": async ({ params, respond, context }) => {
+    const phoneNumber = (params as { phoneNumber?: string }).phoneNumber;
+    if (!phoneNumber || typeof phoneNumber !== "string") {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "phoneNumber is required"),
+      );
+      return;
+    }
+    try {
+      const accountId = resolveAccountId(params);
+      const provider = resolveWebLoginProvider();
+      if (provider) {
+        await context.stopChannel(provider.id, accountId);
+      }
+      const { startWebLoginWithPairingCode } = await import("../../web/login-qr.js");
+      const result = await startWebLoginWithPairingCode({
+        phoneNumber,
+        force: Boolean((params as { force?: boolean }).force),
         verbose: Boolean((params as { verbose?: boolean }).verbose),
         accountId,
       });

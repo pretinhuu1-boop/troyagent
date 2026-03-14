@@ -1,17 +1,5 @@
-<svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="troy-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#a3e635"/>
-      <stop offset="100%" stop-color="#65a30d"/>
-    </linearGradient>
-  </defs>
-  <!-- Background - sharp rect, neo-brutalist -->
-  <rect width="120" height="120" fill="#0a0a0a"/>
-  <rect x="2" y="2" width="116" height="116" stroke="url(#troy-gradient)" stroke-width="4" fill="none"/>
-  <!-- TV monogram -->
-  <text x="20" y="70" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="62" fill="url(#troy-gradient)">TV</text>
-  <!-- Bottom bar accent -->
-  <rect x="16" y="82" width="88" height="4" fill="url(#troy-gradient)" opacity="0.5"/>
-  <!-- "AGENT" label -->
-  <text x="60" y="106" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="16" fill="#666666" text-anchor="middle" letter-spacing="4">AGENT</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <rect width="120" height="120" rx="16" fill="#0A0A0A"/>
+  <text x="60" y="82" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="72" letter-spacing="4" fill="#F2EFE9">T</text>
+  <rect x="24" y="98" width="72" height="2" rx="1" fill="#6B0F1A"/>
 </svg>

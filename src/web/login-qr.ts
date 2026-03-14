@@ -213,6 +213,72 @@ export async function startWebLoginWithQr(
   };
 }
 
+export async function startWebLoginWithPairingCode(
+  opts: {
+    phoneNumber: string;
+    verbose?: boolean;
+    timeoutMs?: number;
+    force?: boolean;
+    accountId?: string;
+    runtime?: RuntimeEnv;
+  },
+): Promise<{ pairingCode?: string; message: string }> {
+  const runtime = opts.runtime ?? defaultRuntime;
+  const cfg = loadConfig();
+  const account = resolveWhatsAppAccount({ cfg, accountId: opts.accountId });
+  const hasWeb = await webAuthExists(account.authDir);
+  if (hasWeb && !opts.force) {
+    return {
+      message: `WhatsApp is already linked. Use force=true to relink.`,
+    };
+  }
+
+  await resetActiveLogin(account.accountId);
+
+  let sock: Awaited<ReturnType<typeof createWaSocket>>;
+  try {
+    sock = await createWaSocket(false, Boolean(opts.verbose), {
+      authDir: account.authDir,
+    });
+  } catch (err) {
+    return { message: `Failed to start WhatsApp login: ${String(err)}` };
+  }
+
+  const login: ActiveLogin = {
+    accountId: account.accountId,
+    authDir: account.authDir,
+    isLegacyAuthDir: account.isLegacyAuthDir,
+    id: randomUUID(),
+    sock,
+    startedAt: Date.now(),
+    connected: false,
+    waitPromise: Promise.resolve(),
+    restartAttempted: false,
+    verbose: Boolean(opts.verbose),
+  };
+  activeLogins.set(account.accountId, login);
+  attachLoginWaiter(account.accountId, login);
+
+  // Normalize phone number: remove spaces, dashes, plus sign prefix
+  const phone = opts.phoneNumber.replace(/[\s\-\(\)]/g, "").replace(/^\+/, "");
+
+  try {
+    // Wait a moment for the socket to initialize before requesting pairing code
+    await new Promise((r) => setTimeout(r, 2000));
+    const code = await sock.requestPairingCode(phone);
+    runtime.log(info(`WhatsApp pairing code generated for +${phone}: ${code}`));
+    return {
+      pairingCode: code,
+      message: `Enter this code in WhatsApp → Linked Devices → Link with phone number: ${code}`,
+    };
+  } catch (err) {
+    await resetActiveLogin(account.accountId);
+    return {
+      message: `Failed to request pairing code: ${String(err)}`,
+    };
+  }
+}
+
 export async function waitForWebLogin(
   opts: { timeoutMs?: number; runtime?: RuntimeEnv; accountId?: string } = {},
 ): Promise<{ connected: boolean; message: string }> {

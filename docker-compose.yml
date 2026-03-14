@@ -1,5 +1,5 @@
 services:
-  openclaw-gateway:
+  taura-gateway:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
     build: .
     environment:
@@ -24,7 +24,7 @@ services:
     networks:
       - troy-net
 
-  openclaw-cli:
+  taura-cli:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
     build: .
     environment:
@@ -57,7 +57,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - openclaw-gateway
+      - taura-gateway
     networks:
       troy-net:
         ipv4_address: 172.28.0.10

@@ -1,1150 +1,500 @@
 import { html, nothing } from "lit";
-import type { GatewayBrowserClient } from "../gateway.ts";
 
-/* ── Relationship with Canvas CRM ────────────────────────────
- * The Canvas CRM module lives at `src/canvas-host/vape-dashboard/crm.js`.
- * The agent interacts with it via `canvas eval` → `window.troyCRM.*`.
- * Both share the same localStorage keys and stay in sync automatically.
- * This Lit version is the operator-facing UI for viewing and managing contacts.
- * ────────────────────────────────────────────────────────────── */
+/* ── API Config (backend proxy) ───────────────────────────── */
+const API_BASE = "/api";
 
-/* ── Storage Keys ────────────────────────────────────────────── */
-const CRM_CONTACTS_KEY = "troy_crm_contacts";
-const CRM_INTERACTIONS_KEY = "troy_crm_interactions";
-
-/* ── Types ───────────────────────────────────────────────────── */
-interface Contact {
-  phone: string;
+/* ── Types ───────────────────────────────────────────────── */
+interface Customer {
+  id: string;
   name: string;
-  stage: string;
-  tags: string[];
-  firstContact: number;
-  lastContact: number;
-  totalOrders: number;
-  totalSpent: number;
-  notes: string;
-}
-
-interface Interaction {
   phone: string;
-  intent: string;
-  products: string[];
-  timestamp: number;
+  email: string | null;
+  type: "b2c" | "b2b";
+  company_name: string | null;
+  cpf_cnpj: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-interface WhatsAppStatus {
-  configured?: boolean;
-  linked?: boolean;
-  running?: boolean;
-  connected?: boolean;
-  lastConnectedAt?: number;
-  lastMessageAt?: number;
-  lastError?: string;
+interface CRMState {
+  state: {
+    requestUpdate?: () => void;
+  };
+  requestUpdate?: () => void;
 }
 
-type StageFilter =
-  | "all"
-  | "new"
-  | "interested"
-  | "negotiating"
-  | "ordered"
-  | "paid"
-  | "delivered"
-  | "returning";
-type WaStep = "idle" | "loading" | "qr" | "waiting" | "connected" | "error";
-
-const STAGE_LABELS: Record<string, string> = {
-  new: "Novo",
-  interested: "Interessado",
-  negotiating: "Negociando",
-  ordered: "Pedido Feito",
-  paid: "Pago",
-  delivered: "Entregue",
-  returning: "Recorrente",
-};
-
-const STAGE_COLORS: Record<string, string> = {
-  new: "#3b82f6",
-  interested: "#8b5cf6",
-  negotiating: "#f59e0b",
-  ordered: "#f97316",
-  paid: "#10b981",
-  delivered: "#06b6d4",
-  returning: "#d4a017",
-};
-
-/* ── State ───────────────────────────────────────────────────── */
-let contacts: Record<string, Contact> = {};
-let interactions: Interaction[] = [];
-let stageFilter: StageFilter = "all";
+/* ── State ───────────────────────────────────────────────── */
+let customers: Customer[] = [];
+let loading = false;
+let loaded = false;
+let error: string | null = null;
+let typeFilter: "all" | "b2c" | "b2b" = "all";
 let searchQuery = "";
-let selectedPhone: string | null = null;
-let initialized = false;
-let requestUpdateFn: (() => void) | null = null;
+let selectedId: string | null = null;
+let showForm = false;
+let editing: Customer | null = null;
+let deleteTarget: Customer | null = null;
+let refreshInterval: number | null = null;
+let showSavedBadge = false;
+let savedTimer: number | null = null;
 
-// WhatsApp connection state
-let waStep: WaStep = "idle";
-let waQrDataUrl: string | null = null;
-let waMessage: string | null = null;
-let waStatus: WhatsAppStatus | null = null;
-let waStatusLoading = false;
-let clientRef: GatewayBrowserClient | null = null;
+let formFields = {
+  name: "",
+  phone: "",
+  email: "",
+  type: "b2c" as "b2c" | "b2b",
+  company_name: "",
+  city: "",
+  state: "",
+  notes: "",
+};
 
-/* ── Persistence ─────────────────────────────────────────────── */
-function loadCRM() {
-  try {
-    const savedContacts = localStorage.getItem(CRM_CONTACTS_KEY);
-    if (savedContacts) {
-      contacts = JSON.parse(savedContacts);
-    }
-    const savedInteractions = localStorage.getItem(CRM_INTERACTIONS_KEY);
-    if (savedInteractions) {
-      interactions = JSON.parse(savedInteractions);
-    }
-  } catch {
-    /* ignore */
+/* ── Trigger Update (handles { state } wrapper pattern) ─── */
+function triggerUpdate(s: CRMState) {
+  if (typeof s.requestUpdate === "function") {
+    s.requestUpdate();
+  } else if (s.state && typeof s.state.requestUpdate === "function") {
+    s.state.requestUpdate();
   }
 }
 
-/* ── Helpers ──────────────────────────────────────────────────── */
-function formatPrice(val: number): string {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+/* ── Gateway API ─────────────────────────────────────────── */
+async function apiFetch(path: string, options?: RequestInit) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options?.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`API ${res.status}: ${err}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
-function formatDate(ts: number): string {
-  return new Date(ts).toLocaleDateString("pt-BR", {
+async function fetchCustomers(): Promise<Customer[]> {
+  return apiFetch("/customers");
+}
+
+/* ── Load & Refresh ──────────────────────────────────────── */
+async function loadCustomers(state: CRMState, force = false) {
+  if (loaded && !force) return;
+  loading = true;
+  error = null;
+  triggerUpdate(state);
+  try {
+    customers = await fetchCustomers();
+    loaded = true;
+  } catch (e: any) {
+    error = e.message || "Erro ao carregar clientes";
+    console.error("[crm] load error:", e);
+  } finally {
+    loading = false;
+    triggerUpdate(state);
+  }
+}
+
+function startAutoRefresh(state: CRMState) {
+  if (refreshInterval) return;
+  refreshInterval = window.setInterval(() => {
+    loadCustomers(state, true);
+  }, 30000);
+}
+
+/* ── Helpers ─────────────────────────────────────────────── */
+function filteredCustomers(): Customer[] {
+  let filtered = customers;
+  if (typeFilter !== "all") {
+    filtered = filtered.filter((c) => c.type === typeFilter);
+  }
+  if (searchQuery.trim()) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.phone.includes(q) ||
+        (c.email || "").toLowerCase().includes(q) ||
+        (c.company_name || "").toLowerCase().includes(q) ||
+        (c.city || "").toLowerCase().includes(q),
+    );
+  }
+  return filtered;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",
   });
 }
 
-function formatDateTime(ts: number): string {
-  return new Date(ts).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function timeAgo(ts: number): string {
-  const diff = Date.now() - ts;
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
-  if (min < 1) {
-    return "agora";
-  }
-  if (min < 60) {
-    return `${min}min atrás`;
-  }
+  if (min < 1) return "agora";
+  if (min < 60) return `${min}min`;
   const h = Math.floor(min / 60);
-  if (h < 24) {
-    return `${h}h atrás`;
-  }
-  return `${Math.floor(h / 24)}d atrás`;
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d`;
+  return `${Math.floor(d / 30)}m`;
 }
 
 function maskPhone(phone: string): string {
-  if (!phone || phone.length < 8) {
-    return phone;
-  }
+  if (!phone || phone.length < 8) return phone;
+  // Show country code + last 4
+  if (phone.startsWith("+595")) return `🇵🇾 ...${phone.slice(-4)}`;
+  if (phone.startsWith("+55")) return `🇧🇷 ...${phone.slice(-4)}`;
   return `...${phone.slice(-4)}`;
 }
 
-function getFilteredContacts(): Contact[] {
-  let list = Object.values(contacts);
-  if (stageFilter !== "all") {
-    list = list.filter((c) => c.stage === stageFilter);
-  }
-  if (searchQuery.trim()) {
-    const q = searchQuery.toLowerCase();
-    list = list.filter((c) => c.name.toLowerCase().includes(q) || c.phone.includes(q));
-  }
-  return list.toSorted((a, b) => b.lastContact - a.lastContact);
+function fullPhone(phone: string): string {
+  if (phone.startsWith("+595")) return `🇵🇾 ${phone}`;
+  if (phone.startsWith("+55")) return `🇧🇷 ${phone}`;
+  return phone;
 }
 
-function getContactInteractions(phone: string): Interaction[] {
-  return interactions
-    .filter((i) => i.phone === phone)
-    .toSorted((a, b) => b.timestamp - a.timestamp)
-    .slice(0, 20);
-}
+/* ── Render ───────────────────────────────────────────────── */
+export function renderCRM(state: CRMState) {
+  void loadCustomers(state);
+  startAutoRefresh(state);
 
-function getStats() {
-  const all = Object.values(contacts);
-  const now = Date.now();
-  const day = 86400000;
-  return {
-    total: all.length,
-    activeToday: all.filter((c) => now - c.lastContact < day).length,
-    activeWeek: all.filter((c) => now - c.lastContact < 7 * day).length,
-    totalRevenue: all.reduce((sum, c) => sum + c.totalSpent, 0),
-    byStage: Object.fromEntries(
-      Object.keys(STAGE_LABELS).map((s) => [s, all.filter((c) => c.stage === s).length]),
-    ),
+  const filtered = filteredCustomers();
+  const b2cCount = customers.filter((c) => c.type === "b2c").length;
+  const b2bCount = customers.filter((c) => c.type === "b2b").length;
+  const citiesCount = new Set(customers.map((c) => c.city).filter(Boolean)).size;
+  const selected = selectedId ? customers.find((c) => c.id === selectedId) : null;
+
+  /* ── Handlers ── */
+  const handleSearch = (e: Event) => {
+    searchQuery = (e.target as HTMLInputElement).value;
+    triggerUpdate(state);
   };
-}
 
-/* ── WhatsApp Actions ────────────────────────────────────────── */
-async function loadWhatsAppStatus() {
-  if (!clientRef || waStatusLoading) {
-    return;
-  }
-  waStatusLoading = true;
-  requestUpdateFn?.();
-  try {
-    const res = await clientRef.request<{ channels?: { whatsapp?: WhatsAppStatus } }>(
-      "channels.status",
-      { probe: false, timeoutMs: 8000 },
-    );
-    waStatus = res?.channels?.whatsapp ?? null;
-    if (waStatus?.connected && waStep !== "connected") {
-      waStep = "connected";
-      waQrDataUrl = null;
+  const handleTypeFilter = (t: "all" | "b2c" | "b2b") => () => {
+    typeFilter = t;
+    triggerUpdate(state);
+  };
+
+  const handleSelect = (id: string) => () => {
+    selectedId = selectedId === id ? null : id;
+    triggerUpdate(state);
+  };
+
+  const handleAdd = () => {
+    editing = null;
+    formFields = {
+      name: "",
+      phone: "",
+      email: "",
+      type: "b2c",
+      company_name: "",
+      city: "",
+      state: "",
+      notes: "",
+    };
+    showForm = true;
+    triggerUpdate(state);
+  };
+
+  const handleEdit = (c: Customer) => {
+    editing = { ...c };
+    formFields = {
+      name: c.name,
+      phone: c.phone,
+      email: c.email || "",
+      type: c.type,
+      company_name: c.company_name || "",
+      city: c.city || "",
+      state: c.state || "",
+      notes: c.notes || "",
+    };
+    showForm = true;
+    triggerUpdate(state);
+  };
+
+  const onField = (field: keyof typeof formFields) => (e: Event) => {
+    (formFields as any)[field] = (e.target as HTMLInputElement).value;
+  };
+
+  const handleCancel = () => {
+    showForm = false;
+    editing = null;
+    triggerUpdate(state);
+  };
+
+  const handleSave = async () => {
+    const name = formFields.name.trim();
+    const phone = formFields.phone.trim();
+    if (!name || !phone) return;
+
+    const payload: any = {
+      name,
+      phone,
+      email: formFields.email || null,
+      type: formFields.type,
+      company_name: formFields.company_name || null,
+      city: formFields.city || null,
+      state: formFields.state || null,
+      notes: formFields.notes || null,
+    };
+
+    try {
+      if (editing) {
+        payload.id = editing.id;
+        payload.updated_at = new Date().toISOString();
+        // We'd need a PATCH endpoint — for now reload
+        // TODO: implement PATCH /api/customers/:id
+      }
+      // POST creates new
+      const result = await apiFetch("/customers", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (result?.[0]) {
+        customers.unshift(result[0]);
+      }
+      showForm = false;
+      editing = null;
+      showFeedback(state);
+    } catch (e: any) {
+      error = e.message;
     }
-  } catch {
-    waStatus = null;
-  }
-  waStatusLoading = false;
-  requestUpdateFn?.();
-}
+    triggerUpdate(state);
+  };
 
-async function startQrLogin(force = false) {
-  if (!clientRef) {
-    return;
-  }
-  waStep = "loading";
-  waMessage = "Gerando QR Code...";
-  waQrDataUrl = null;
-  requestUpdateFn?.();
-  try {
-    const res = await clientRef.request<{ message?: string; qrDataUrl?: string }>(
-      "web.login.start",
-      { force, timeoutMs: 30000 },
-    );
-    waQrDataUrl = res.qrDataUrl ?? null;
-    waMessage = res.message ?? null;
-    waStep = waQrDataUrl ? "qr" : "error";
-    if (waQrDataUrl) {
-      // Auto-start waiting for scan
-      requestUpdateFn?.();
-      await waitForScan();
+  const handleDelete = (c: Customer) => {
+    deleteTarget = c;
+    triggerUpdate(state);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await apiFetch(`/customers/${deleteTarget.id}`, { method: "DELETE" });
+      customers = customers.filter((x) => x.id !== deleteTarget!.id);
+      if (selectedId === deleteTarget.id) selectedId = null;
+      deleteTarget = null;
+      showFeedback(state);
+    } catch (e: any) {
+      error = e.message;
     }
-  } catch (err) {
-    waMessage = String(err);
-    waStep = "error";
-  }
-  requestUpdateFn?.();
-}
+    triggerUpdate(state);
+  };
 
-async function waitForScan() {
-  if (!clientRef) {
-    return;
-  }
-  waStep = "waiting";
-  requestUpdateFn?.();
-  try {
-    const res = await clientRef.request<{ message?: string; connected?: boolean }>(
-      "web.login.wait",
-      { timeoutMs: 120000 },
-    );
-    waMessage = res.message ?? null;
-    if (res.connected) {
-      waStep = "connected";
-      waQrDataUrl = null;
-      void loadWhatsAppStatus();
-    } else {
-      waStep = "qr";
-      waMessage = "QR expirou. Clique para gerar outro.";
-    }
-  } catch (err) {
-    waMessage = String(err);
-    waStep = "error";
-  }
-  requestUpdateFn?.();
-}
+  const cancelDelete = () => {
+    deleteTarget = null;
+    triggerUpdate(state);
+  };
 
-/* ── Render: WhatsApp Connection Panel ───────────────────────── */
-function renderWhatsAppPanel(connected: boolean) {
-  const isGatewayConnected = connected && clientRef;
-  const isWaConnected = waStatus?.connected === true;
-
-  // Connected state — compact green bar
-  if (isWaConnected && waStep !== "qr" && waStep !== "waiting" && waStep !== "loading") {
-    return html`
-      <div class="wa-panel wa-connected">
-        <div class="wa-connected-row">
-          <span class="wa-status-dot online"></span>
-          <span class="wa-connected-label">WhatsApp Conectado</span>
-          ${waStatus?.lastMessageAt ? html`<span class="wa-connected-meta">Última msg: ${timeAgo(waStatus.lastMessageAt)}</span>` : nothing}
-          <button class="wa-btn-small" @click=${() => loadWhatsAppStatus()}>Atualizar</button>
-        </div>
-      </div>
-    `;
+  function showFeedback(st: CRMState) {
+    showSavedBadge = true;
+    if (savedTimer) clearTimeout(savedTimer);
+    savedTimer = window.setTimeout(() => {
+      showSavedBadge = false;
+      triggerUpdate(st);
+    }, 2500);
   }
 
-  // Not connected — show connection wizard
+  /* ── Template ── */
   return html`
-    <div class="wa-panel">
-      <div class="wa-header">
-        <div class="wa-header-icon">📱</div>
-        <div>
-          <h3 class="wa-title">Conectar WhatsApp</h3>
-          <p class="wa-subtitle">Vincule o número da loja para o agente atender seus clientes</p>
+    <div class="tv-catalogo">
+      <!-- KPI Bar -->
+      <div class="tv-kpi-grid">
+        <div class="tv-kpi">
+          <div class="tv-kpi-icon">👥</div>
+          <div>
+            <div class="tv-kpi-value">${customers.length}</div>
+            <div class="tv-kpi-label">Total Clientes</div>
+          </div>
+        </div>
+        <div class="tv-kpi">
+          <div class="tv-kpi-icon">🛒</div>
+          <div>
+            <div class="tv-kpi-value">${b2cCount}</div>
+            <div class="tv-kpi-label">Pessoa Fisica (B2C)</div>
+          </div>
+        </div>
+        <div class="tv-kpi">
+          <div class="tv-kpi-icon">🏢</div>
+          <div>
+            <div class="tv-kpi-value">${b2bCount}</div>
+            <div class="tv-kpi-label">Empresas (B2B)</div>
+          </div>
+        </div>
+        <div class="tv-kpi">
+          <div class="tv-kpi-icon">📍</div>
+          <div>
+            <div class="tv-kpi-value">${citiesCount}</div>
+            <div class="tv-kpi-label">Cidades</div>
+          </div>
         </div>
       </div>
 
-      ${
-        !isGatewayConnected
-          ? html`
-              <div class="wa-step-content">
-                <div class="wa-offline-msg">
-                  <span class="wa-status-dot offline"></span>
-                  Gateway offline — conecte ao gateway primeiro
-                </div>
+      <!-- Header -->
+      <div class="tv-panel-header">
+        <div class="tv-search-bar">
+          <input
+            type="text"
+            placeholder="Buscar por nome, telefone, email, empresa..."
+            .value=${searchQuery}
+            @input=${handleSearch}
+          />
+        </div>
+        <div class="tv-header-actions">
+          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
+          ${loading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">⟳ Carregando...</span>` : nothing}
+          ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ Erro</span>` : nothing}
+          <button class="tv-btn-sm" @click=${() => { loaded = false; loadCustomers(state, true); }}>🔄 Atualizar</button>
+          <button class="tv-btn-gold" @click=${handleAdd}>+ Novo Cliente</button>
+        </div>
+      </div>
+
+      <!-- Type Filter Bar -->
+      <div class="tv-category-bar">
+        <button class="tv-cat-btn ${typeFilter === "all" ? "active" : ""}" @click=${handleTypeFilter("all")}>
+          Todos <span class="tv-cat-count">${customers.length}</span>
+        </button>
+        <button class="tv-cat-btn ${typeFilter === "b2c" ? "active" : ""}" @click=${handleTypeFilter("b2c")}>
+          🛒 B2C <span class="tv-cat-count">${b2cCount}</span>
+        </button>
+        <button class="tv-cat-btn ${typeFilter === "b2b" ? "active" : ""}" @click=${handleTypeFilter("b2b")}>
+          🏢 B2B <span class="tv-cat-count">${b2bCount}</span>
+        </button>
+      </div>
+
+      <!-- Delete Confirmation -->
+      ${deleteTarget ? html`
+        <div class="tv-confirm-bar">
+          <span>Excluir <strong>${deleteTarget.name}</strong> (${deleteTarget.phone})?</span>
+          <button class="tv-btn-danger" @click=${confirmDelete}>Confirmar</button>
+          <button class="tv-btn-sm" @click=${cancelDelete}>Cancelar</button>
+        </div>
+      ` : nothing}
+
+      <!-- Customer Form -->
+      ${showForm ? html`
+        <div class="tv-panel tv-form-panel">
+          <h3>${editing ? `Editar: ${editing.name}` : "Novo Cliente"}</h3>
+          <div class="tv-form-grid">
+            <div class="tv-config-field">
+              <label>Nome *</label>
+              <input type="text" .value=${formFields.name} @input=${onField("name")} placeholder="Nome completo" />
+            </div>
+            <div class="tv-config-field">
+              <label>Telefone *</label>
+              <input type="text" .value=${formFields.phone} @input=${onField("phone")} placeholder="+55 11 99999-9999" />
+            </div>
+            <div class="tv-config-field">
+              <label>Email</label>
+              <input type="email" .value=${formFields.email} @input=${onField("email")} placeholder="email@exemplo.com" />
+            </div>
+            <div class="tv-config-field">
+              <label>Tipo</label>
+              <select .value=${formFields.type} @change=${onField("type")}>
+                <option value="b2c">B2C - Pessoa Fisica</option>
+                <option value="b2b">B2B - Empresa</option>
+              </select>
+            </div>
+            <div class="tv-config-field">
+              <label>Empresa</label>
+              <input type="text" .value=${formFields.company_name} @input=${onField("company_name")} placeholder="Nome da empresa (se B2B)" />
+            </div>
+            <div class="tv-config-field">
+              <label>Cidade</label>
+              <input type="text" .value=${formFields.city} @input=${onField("city")} placeholder="Cidade" />
+            </div>
+            <div class="tv-config-field">
+              <label>Estado/Depto</label>
+              <input type="text" .value=${formFields.state} @input=${onField("state")} placeholder="SP, RJ, Alto Paraná..." />
+            </div>
+            <div class="tv-config-field" style="grid-column: span 2;">
+              <label>Notas</label>
+              <textarea rows="2" .value=${formFields.notes} @input=${onField("notes")} placeholder="Observacoes sobre o cliente"></textarea>
+            </div>
+          </div>
+          <div class="tv-config-actions">
+            <button class="tv-btn-gold" @click=${handleSave}>${editing ? "Atualizar" : "Adicionar"}</button>
+            <button class="tv-btn-outline" @click=${handleCancel}>Cancelar</button>
+          </div>
+        </div>
+      ` : nothing}
+
+      <!-- Customer List -->
+      ${filtered.length === 0 && !loading ? html`
+        <div class="tv-empty">
+          ${searchQuery || typeFilter !== "all"
+            ? "Nenhum cliente encontrado com esse filtro."
+            : "Nenhum cliente cadastrado. Clique em '+ Novo Cliente' para começar."}
+        </div>
+      ` : nothing}
+
+      <!-- Customer Grid -->
+      <div class="tv-product-grid">
+        ${filtered.map((c) => html`
+          <div class="tv-product-card ${selectedId === c.id ? "tv-card-selected" : ""}" @click=${handleSelect(c.id)}>
+            <div class="tv-product-img" style="
+              display: flex; align-items: center; justify-content: center;
+              font-size: 2.5rem; background: rgba(107, 15, 26, 0.06);
+            ">
+              ${c.type === "b2b" ? "🏢" : "👤"}
+            </div>
+            <div class="tv-product-body">
+              <div class="tv-product-header">
+                <strong>${c.name}</strong>
+                <span class="tv-badge tv-badge--category" style="
+                  background: ${c.type === "b2b" ? "rgba(139, 92, 246, 0.12)" : "rgba(59, 130, 246, 0.12)"};
+                  color: ${c.type === "b2b" ? "#8b5cf6" : "#3b82f6"};
+                ">${c.type === "b2b" ? "🏢 B2B" : "🛒 B2C"}</span>
               </div>
-            `
-          : html`
-        <div class="wa-steps">
-          <div class="wa-step ${waStep === "idle" || waStep === "error" ? "active" : waStep === "qr" || waStep === "waiting" || waStep === "connected" ? "done" : ""}">
-            <span class="wa-step-num">1</span>
-            <span class="wa-step-label">Gerar QR</span>
-          </div>
-          <div class="wa-step-line"></div>
-          <div class="wa-step ${waStep === "qr" || waStep === "waiting" ? "active" : waStep === "connected" ? "done" : ""}">
-            <span class="wa-step-num">2</span>
-            <span class="wa-step-label">Escanear</span>
-          </div>
-          <div class="wa-step-line"></div>
-          <div class="wa-step ${waStep === "connected" ? "active done" : ""}">
-            <span class="wa-step-num">3</span>
-            <span class="wa-step-label">Pronto!</span>
-          </div>
-        </div>
-
-        <div class="wa-step-content">
-          ${
-            waStep === "idle"
-              ? html`
-            <p class="wa-instruction">Clique abaixo para gerar o QR Code. Depois, abra o WhatsApp no celular da loja e vá em <strong>Dispositivos Vinculados → Vincular Dispositivo</strong>.</p>
-            <button class="wa-btn-primary" @click=${() => startQrLogin(false)}>Gerar QR Code</button>
-          `
-              : nothing
-          }
-
-          ${
-            waStep === "loading"
-              ? html`
-                  <div class="wa-loading">
-                    <div class="wa-spinner"></div>
-                    <span>Gerando QR Code...</span>
-                  </div>
-                `
-              : nothing
-          }
-
-          ${
-            waStep === "qr" && waQrDataUrl
-              ? html`
-            <div class="wa-qr-container">
-              <div class="wa-qr-frame">
-                <img src=${waQrDataUrl} alt="WhatsApp QR Code" class="wa-qr-img" />
+              <div class="tv-product-sku">
+                ${fullPhone(c.phone)}
+                ${c.email ? html` · ✉️ ${c.email}` : nothing}
               </div>
-              <p class="wa-qr-hint">Abra o WhatsApp → Dispositivos Vinculados → Escanear</p>
-              <div class="wa-qr-timer">Expira em 3 minutos</div>
+              ${c.company_name ? html`<div class="tv-product-sku" style="color: var(--tv-lime-light, #8a1322);">🏢 ${c.company_name}</div>` : nothing}
+              ${c.city ? html`<div class="tv-product-sku">📍 ${c.city}${c.state ? `, ${c.state}` : ""}</div>` : nothing}
+              ${c.notes ? html`<div class="tv-product-desc">${c.notes}</div>` : nothing}
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
+                <span style="font-size:0.72rem;color:var(--tv-text-muted)">Cadastro: ${formatDate(c.created_at)}</span>
+                <span style="font-size:0.72rem;color:var(--tv-text-muted)">Atualizado: ${timeAgo(c.updated_at)}</span>
+              </div>
+              <div class="tv-product-actions">
+                <button class="tv-btn-sm" @click=${(e: Event) => { e.stopPropagation(); handleEdit(c); }}>✏️ Editar</button>
+                <button class="tv-btn-sm tv-btn-sm--danger" @click=${(e: Event) => { e.stopPropagation(); handleDelete(c); }}>🗑️</button>
+              </div>
             </div>
-          `
-              : nothing
-          }
-
-          ${
-            waStep === "waiting"
-              ? html`
-                  <div class="wa-loading">
-                    <div class="wa-spinner"></div>
-                    <span>Aguardando scan do QR Code...</span>
-                  </div>
-                `
-              : nothing
-          }
-
-          ${
-            waStep === "connected"
-              ? html`
-                  <div class="wa-success">
-                    <span class="wa-success-icon">✅</span>
-                    <span>WhatsApp conectado com sucesso!</span>
-                  </div>
-                `
-              : nothing
-          }
-
-          ${
-            waStep === "error"
-              ? html`
-            <div class="wa-error">
-              <p>${waMessage || "Erro ao conectar. Tente novamente."}</p>
-              <button class="wa-btn-primary" @click=${() => startQrLogin(true)}>Tentar Novamente</button>
-            </div>
-          `
-              : nothing
-          }
-        </div>
-      `
-      }
-    </div>
-  `;
-}
-
-/* ── Render: CRM Sections ────────────────────────────────────── */
-function renderKPIs() {
-  const stats = getStats();
-  return html`
-    <div class="troy-crm-kpis">
-      <div class="troy-crm-kpi"><span class="troy-crm-kpi-value">${stats.total}</span><span class="troy-crm-kpi-label">Contatos</span></div>
-      <div class="troy-crm-kpi"><span class="troy-crm-kpi-value">${stats.activeToday}</span><span class="troy-crm-kpi-label">Ativos Hoje</span></div>
-      <div class="troy-crm-kpi"><span class="troy-crm-kpi-value">${stats.activeWeek}</span><span class="troy-crm-kpi-label">Ativos Semana</span></div>
-      <div class="troy-crm-kpi"><span class="troy-crm-kpi-value">${formatPrice(stats.totalRevenue)}</span><span class="troy-crm-kpi-label">Receita Total</span></div>
-    </div>
-  `;
-}
-
-function renderPipeline() {
-  const stats = getStats();
-  return html`
-    <div class="troy-crm-pipeline">
-      ${Object.entries(STAGE_LABELS).map(
-        ([stage, label]) => html`
-        <div class="troy-crm-pipeline-item ${stageFilter === stage ? "active" : ""}" style="--stage-color: ${STAGE_COLORS[stage] || "#666"}"
-          @click=${() => {
-            stageFilter = stageFilter === stage ? "all" : (stage as StageFilter);
-            requestUpdateFn?.();
-          }}>
-          <span class="troy-crm-pipeline-count">${stats.byStage[stage] || 0}</span>
-          <span class="troy-crm-pipeline-label">${label}</span>
-        </div>
-      `,
-      )}
-    </div>
-  `;
-}
-
-function renderContactList() {
-  const filtered = getFilteredContacts();
-  return html`
-    <div class="troy-crm-contacts-header">
-      <input type="text" class="troy-crm-search" placeholder="Buscar por nome ou telefone..." .value=${searchQuery}
-        @input=${(e: Event) => {
-          searchQuery = (e.target as HTMLInputElement).value;
-          requestUpdateFn?.();
-        }} />
-      <span class="troy-crm-count">${filtered.length} contatos</span>
-    </div>
-    <div class="troy-crm-contact-list">
-      ${
-        filtered.length === 0
-          ? html`<div class="troy-crm-empty">Nenhum contato ${stageFilter !== "all" ? `com estágio "${STAGE_LABELS[stageFilter]}"` : "encontrado"}.</div>`
-          : filtered.map(
-              (c) => html`
-          <div class="troy-crm-contact-row ${selectedPhone === c.phone ? "selected" : ""}"
-            @click=${() => {
-              selectedPhone = selectedPhone === c.phone ? null : c.phone;
-              requestUpdateFn?.();
-            }}>
-            <div class="troy-crm-contact-info">
-              <span class="troy-crm-contact-name">${c.name}</span>
-              <span class="troy-crm-contact-phone">${maskPhone(c.phone)}</span>
-            </div>
-            <div class="troy-crm-contact-meta">
-              <span class="troy-crm-stage-badge" style="background: ${STAGE_COLORS[c.stage] || "#666"}20; color: ${STAGE_COLORS[c.stage] || "#666"}">${STAGE_LABELS[c.stage] || c.stage}</span>
-              <span class="troy-crm-contact-time">${timeAgo(c.lastContact)}</span>
-            </div>
-            ${c.totalOrders > 0 ? html`<div class="troy-crm-contact-stats"><span>${c.totalOrders} pedido${c.totalOrders > 1 ? "s" : ""}</span><span>${formatPrice(c.totalSpent)}</span></div>` : nothing}
           </div>
-        `,
-            )
-      }
-    </div>
-  `;
-}
+        `)}
+      </div>
 
-function renderContactDetail() {
-  if (!selectedPhone || !contacts[selectedPhone]) {
-    return nothing;
-  }
-  const c = contacts[selectedPhone];
-  const history = getContactInteractions(selectedPhone);
-  return html`
-    <div class="troy-crm-detail">
-      <div class="troy-crm-detail-header">
-        <h3>${c.name}</h3>
-        <span class="troy-crm-detail-phone">${c.phone}</span>
-        <span class="troy-crm-stage-badge large" style="background: ${STAGE_COLORS[c.stage] || "#666"}20; color: ${STAGE_COLORS[c.stage] || "#666"}">${STAGE_LABELS[c.stage] || c.stage}</span>
-      </div>
-      <div class="troy-crm-detail-stats">
-        <div class="troy-crm-detail-stat"><span class="troy-crm-detail-stat-value">${c.totalOrders}</span><span class="troy-crm-detail-stat-label">Pedidos</span></div>
-        <div class="troy-crm-detail-stat"><span class="troy-crm-detail-stat-value">${formatPrice(c.totalSpent)}</span><span class="troy-crm-detail-stat-label">Total Gasto</span></div>
-        <div class="troy-crm-detail-stat"><span class="troy-crm-detail-stat-value">${formatDate(c.firstContact)}</span><span class="troy-crm-detail-stat-label">Primeiro Contato</span></div>
-        <div class="troy-crm-detail-stat"><span class="troy-crm-detail-stat-value">${timeAgo(c.lastContact)}</span><span class="troy-crm-detail-stat-label">Último Contato</span></div>
-      </div>
-      ${c.tags.length > 0 ? html`<div class="troy-crm-detail-tags">${c.tags.map((t) => html`<span class="troy-crm-tag">${t}</span>`)}</div>` : nothing}
-      ${c.notes ? html`<div class="troy-crm-detail-notes"><strong>Notas:</strong> ${c.notes}</div>` : nothing}
-      <div class="troy-crm-detail-history">
-        <h4>Histórico de Interações</h4>
-        ${
-          history.length === 0
-            ? html`
-                <div class="troy-crm-empty">Sem interações registradas.</div>
-              `
-            : history.map(
-                (i) => html`
-            <div class="troy-crm-history-item">
-              <span class="troy-crm-history-intent ${i.intent}">${i.intent}</span>
-              <span class="troy-crm-history-time">${formatDateTime(i.timestamp)}</span>
-              ${i.products.length > 0 ? html`<span class="troy-crm-history-products">${i.products.join(", ")}</span>` : nothing}
+      <!-- Selected Customer Detail -->
+      ${selected ? html`
+        <div class="tv-panel" style="border-left: 3px solid var(--accent, #6B0F1A); margin-top: 1rem;">
+          <h3 style="margin: 0 0 0.75rem; font-size: 1.1rem;">${selected.name}</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+            <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Telefone</span><br/><strong>${fullPhone(selected.phone)}</strong></div>
+            <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Email</span><br/><strong>${selected.email || "—"}</strong></div>
+            <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Tipo</span><br/><strong>${selected.type === "b2b" ? "Empresa (B2B)" : "Pessoa Fisica (B2C)"}</strong></div>
+            ${selected.company_name ? html`<div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Empresa</span><br/><strong>${selected.company_name}</strong></div>` : nothing}
+            <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Localidade</span><br/><strong>${selected.city || "—"}${selected.state ? `, ${selected.state}` : ""}</strong></div>
+            <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Cadastrado em</span><br/><strong>${formatDate(selected.created_at)}</strong></div>
+          </div>
+          ${selected.notes ? html`
+            <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px;">
+              <span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Notas</span><br/>
+              <span style="font-size: 0.85rem;">${selected.notes}</span>
             </div>
-          `,
-              )
-        }
-      </div>
-    </div>
-  `;
-}
-
-/* ── Styles ───────────────────────────────────────────────────── */
-function renderStyles() {
-  return html`
-    <style>
-      .troy-crm {
-        padding: 0.5rem 0;
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
-        position: relative;
-      }
-
-      /* WhatsApp Panel — glassmorphism */
-      .wa-panel {
-        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
-        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
-        border-radius: var(--tv-radius, 14px);
-        padding: 1.25rem;
-        backdrop-filter: blur(8px);
-      }
-      .wa-panel.wa-connected {
-        padding: 0.75rem 1rem;
-        border-color: rgba(37, 211, 102, 0.25);
-        background: linear-gradient(135deg, rgba(37, 211, 102, 0.06), transparent);
-      }
-      .wa-connected-row {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
-      .wa-connected-label {
-        font-weight: 600;
-        color: #25d366;
-        font-size: 0.9rem;
-      }
-      .wa-connected-meta {
-        font-size: 0.75rem;
-        color: var(--tv-text-muted);
-        flex: 1;
-      }
-      .wa-status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        display: inline-block;
-        flex-shrink: 0;
-      }
-      .wa-status-dot.online {
-        background: #25d366;
-        box-shadow: 0 0 6px #25d36680;
-      }
-      .wa-status-dot.offline {
-        background: var(--tv-danger, #ef4444);
-      }
-      .wa-header {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-        margin-bottom: 1.25rem;
-      }
-      .wa-header-icon {
-        font-size: 2rem;
-      }
-      .wa-title {
-        margin: 0;
-        color: var(--text-strong);
-        font-size: 1.1rem;
-        font-weight: 700;
-      }
-      .wa-subtitle {
-        margin: 0.15rem 0 0;
-        color: var(--tv-text-muted);
-        font-size: 0.8rem;
-      }
-
-      /* Steps indicator */
-      .wa-steps {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0;
-        margin-bottom: 1.25rem;
-      }
-      .wa-step {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.25rem;
-        opacity: 0.4;
-        transition: all 0.3s;
-      }
-      .wa-step.active {
-        opacity: 1;
-      }
-      .wa-step.done {
-        opacity: 0.7;
-      }
-      .wa-step-num {
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        background: var(--tv-border, rgba(163, 230, 53, 0.15));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.75rem;
-        font-weight: 700;
-        color: var(--tv-text-muted);
-      }
-      .wa-step.active .wa-step-num {
-        background: #25d366;
-        color: #fff;
-      }
-      .wa-step.done .wa-step-num {
-        background: #25d36640;
-        color: #25d366;
-      }
-      .wa-step-label {
-        font-size: 0.65rem;
-        color: var(--tv-text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-      .wa-step.active .wa-step-label {
-        color: #25d366;
-      }
-      .wa-step-line {
-        flex: 1;
-        max-width: 60px;
-        height: 2px;
-        background: var(--tv-border, rgba(163, 230, 53, 0.15));
-        margin: 0 0.5rem;
-        margin-bottom: 1rem;
-      }
-
-      /* Step content */
-      .wa-step-content {
-        text-align: center;
-      }
-      .wa-instruction {
-        color: var(--tv-text-muted);
-        font-size: 0.85rem;
-        margin: 0 0 1rem;
-        line-height: 1.5;
-      }
-      .wa-btn-primary {
-        background: #25d366;
-        color: #fff;
-        border: none;
-        border-radius: 10px;
-        padding: 0.75rem 2rem;
-        font-size: 0.9rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s;
-      }
-      .wa-btn-primary:hover {
-        background: #20bd5a;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 16px rgba(37, 211, 102, 0.3);
-      }
-      .wa-btn-small {
-        background: transparent;
-        color: var(--tv-text-muted);
-        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
-        border-radius: 8px;
-        padding: 0.25rem 0.6rem;
-        font-size: 0.7rem;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-      .wa-btn-small:hover {
-        border-color: var(--tv-lime, #a3e635);
-        color: var(--tv-lime, #a3e635);
-      }
-
-      /* QR Code display */
-      .wa-qr-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.75rem;
-      }
-      .wa-qr-frame {
-        background: #fff;
-        border-radius: 16px;
-        padding: 16px;
-        display: inline-block;
-        box-shadow: 0 4px 24px rgba(37, 211, 102, 0.15);
-      }
-      .wa-qr-img {
-        width: 220px;
-        height: 220px;
-        display: block;
-        image-rendering: pixelated;
-      }
-      .wa-qr-hint {
-        color: var(--tv-text-muted);
-        font-size: 0.8rem;
-        margin: 0;
-      }
-      .wa-qr-timer {
-        color: var(--tv-warning, #f59e0b);
-        font-size: 0.7rem;
-        font-weight: 600;
-      }
-
-      /* Loading spinner */
-      .wa-loading {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.75rem;
-        padding: 1.5rem;
-        color: var(--tv-text-muted);
-        font-size: 0.85rem;
-      }
-      .wa-spinner {
-        width: 20px;
-        height: 20px;
-        border: 2px solid var(--tv-border, rgba(163, 230, 53, 0.15));
-        border-top-color: #25d366;
-        border-radius: 50%;
-        animation: wa-spin 0.8s linear infinite;
-      }
-      @keyframes wa-spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      /* Success / Error */
-      .wa-success {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        padding: 1rem;
-        font-size: 0.9rem;
-        color: #25d366;
-        font-weight: 600;
-      }
-      .wa-success-icon {
-        font-size: 1.5rem;
-      }
-      .wa-error {
-        text-align: center;
-        color: var(--tv-danger, #ef4444);
-        font-size: 0.85rem;
-      }
-      .wa-error p {
-        margin: 0 0 0.75rem;
-      }
-      .wa-offline-msg {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        justify-content: center;
-        color: var(--tv-text-muted);
-        font-size: 0.85rem;
-        padding: 1rem;
-      }
-
-      /* CRM KPIs — glassmorphism cards like vendas */
-      .troy-crm-kpis {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 1.25rem;
-      }
-      .troy-crm-kpi {
-        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
-        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
-        border-radius: var(--tv-radius, 14px);
-        padding: 1.25rem;
-        text-align: center;
-        backdrop-filter: blur(8px);
-        transition: all 0.3s ease;
-      }
-      .troy-crm-kpi:hover {
-        border-color: var(--tv-lime, #a3e635);
-        transform: translateY(-4px);
-        box-shadow: 0 8px 24px var(--tv-glow, rgba(163, 230, 53, 0.08));
-      }
-      .troy-crm-kpi-value {
-        display: block;
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: var(--tv-lime-light, #bef264);
-      }
-      .troy-crm-kpi-label {
-        font-size: 0.75rem;
-        color: var(--tv-text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-top: 4px;
-      }
-
-      /* Pipeline — glassmorphism pills */
-      .troy-crm-pipeline {
-        display: flex;
-        gap: 0.5rem;
-        overflow-x: auto;
-        padding-bottom: 0.25rem;
-        scrollbar-width: none;
-      }
-      .troy-crm-pipeline::-webkit-scrollbar {
-        display: none;
-      }
-      .troy-crm-pipeline-item {
-        flex: 1;
-        min-width: 80px;
-        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
-        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
-        border-radius: var(--tv-radius, 14px);
-        padding: 0.75rem 0.5rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        backdrop-filter: blur(8px);
-      }
-      .troy-crm-pipeline-item:hover {
-        border-color: var(--stage-color);
-        transform: translateY(-2px);
-      }
-      .troy-crm-pipeline-item.active {
-        border-color: var(--stage-color);
-        background: color-mix(in srgb, var(--stage-color) 10%, rgba(255, 255, 255, 0.03));
-      }
-      .troy-crm-pipeline-count {
-        display: block;
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: var(--stage-color);
-      }
-      .troy-crm-pipeline-label {
-        font-size: 0.65rem;
-        color: var(--tv-text-muted);
-        text-transform: uppercase;
-      }
-
-      /* Contact list — glassmorphism */
-      .troy-crm-contacts-header {
-        display: flex;
-        gap: 0.75rem;
-        align-items: center;
-      }
-      .troy-crm-search {
-        flex: 1;
-        padding: 12px 20px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
-        border-radius: 12px;
-        color: var(--tv-text);
-        font-size: 0.9rem;
-        outline: none;
-        transition: all 0.3s ease;
-        font-family: inherit;
-      }
-      .troy-crm-search::placeholder {
-        color: var(--tv-text-muted);
-      }
-      .troy-crm-search:focus {
-        border-color: var(--tv-lime, #a3e635);
-        background: rgba(163, 230, 53, 0.05);
-        box-shadow: 0 0 0 3px rgba(163, 230, 53, 0.08);
-      }
-      .troy-crm-count {
-        font-size: 0.75rem;
-        color: var(--tv-text-muted);
-        white-space: nowrap;
-      }
-      .troy-crm-contact-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        max-height: 500px;
-        overflow-y: auto;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(163, 230, 53, 0.2) transparent;
-      }
-      .troy-crm-contact-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        align-items: center;
-        padding: 0.85rem 1rem;
-        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
-        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
-        border-radius: 12px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-      }
-      .troy-crm-contact-row:hover {
-        border-color: var(--tv-lime, #a3e635);
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px var(--tv-glow, rgba(163, 230, 53, 0.08));
-      }
-      .troy-crm-contact-row.selected {
-        border-color: var(--tv-lime, #a3e635);
-        background: rgba(163, 230, 53, 0.04);
-      }
-      .troy-crm-contact-info {
-        flex: 1;
-        min-width: 120px;
-      }
-      .troy-crm-contact-name {
-        display: block;
-        font-weight: 600;
-        color: var(--text-strong);
-        font-size: 0.875rem;
-      }
-      .troy-crm-contact-phone {
-        font-size: 0.75rem;
-        color: var(--tv-text-muted);
-      }
-      .troy-crm-contact-meta {
-        display: flex;
-        gap: 0.5rem;
-        align-items: center;
-      }
-      .troy-crm-contact-time {
-        font-size: 0.7rem;
-        color: var(--tv-text-muted);
-      }
-      .troy-crm-contact-stats {
-        width: 100%;
-        font-size: 0.7rem;
-        color: var(--tv-text-muted);
-        display: flex;
-        gap: 0.75rem;
-        padding-top: 0.25rem;
-        border-top: 1px solid rgba(255, 255, 255, 0.04);
-      }
-      .troy-crm-stage-badge {
-        padding: 0.15rem 0.5rem;
-        border-radius: 20px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-      }
-      .troy-crm-stage-badge.large {
-        font-size: 0.8rem;
-        padding: 0.25rem 0.75rem;
-      }
-
-      /* Detail panel — glassmorphism */
-      .troy-crm-layout {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-      }
-      @media (max-width: 768px) {
-        .troy-crm-layout,
-        .troy-crm-kpis {
-          grid-template-columns: 1fr;
-        }
-      }
-      .troy-crm-detail {
-        background: var(--tv-bg-card, rgba(255, 255, 255, 0.03));
-        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
-        border-radius: var(--tv-radius, 14px);
-        padding: 1.25rem;
-        backdrop-filter: blur(8px);
-      }
-      .troy-crm-detail-header {
-        margin-bottom: 1rem;
-      }
-      .troy-crm-detail-header h3 {
-        margin: 0 0 0.25rem;
-        color: var(--text-strong);
-        font-size: 1.1rem;
-      }
-      .troy-crm-detail-phone {
-        font-size: 0.8rem;
-        color: var(--tv-text-muted);
-        display: block;
-        margin-bottom: 0.5rem;
-      }
-      .troy-crm-detail-stats {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0.5rem;
-        margin-bottom: 1rem;
-      }
-      .troy-crm-detail-stat {
-        text-align: center;
-        padding: 0.75rem;
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.04);
-        border-radius: 12px;
-      }
-      .troy-crm-detail-stat-value {
-        display: block;
-        font-weight: 700;
-        color: var(--tv-lime-light, #bef264);
-        font-size: 0.9rem;
-      }
-      .troy-crm-detail-stat-label {
-        font-size: 0.65rem;
-        color: var(--tv-text-muted);
-        text-transform: uppercase;
-        margin-top: 2px;
-      }
-      .troy-crm-detail-tags {
-        display: flex;
-        gap: 0.25rem;
-        flex-wrap: wrap;
-        margin-bottom: 0.75rem;
-      }
-      .troy-crm-tag {
-        padding: 3px 10px;
-        background: rgba(163, 230, 53, 0.08);
-        color: var(--tv-lime, #a3e635);
-        border: 1px solid var(--tv-border, rgba(163, 230, 53, 0.15));
-        border-radius: 20px;
-        font-size: 0.7rem;
-        font-weight: 600;
-      }
-      .troy-crm-detail-notes {
-        font-size: 0.8rem;
-        color: var(--tv-text-muted);
-        margin-bottom: 0.75rem;
-        padding: 0.75rem;
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.04);
-        border-radius: 10px;
-      }
-      .troy-crm-detail-history h4 {
-        margin: 0 0 0.5rem;
-        font-size: 0.85rem;
-        color: var(--text-strong);
-      }
-      .troy-crm-history-item {
-        display: flex;
-        gap: 0.5rem;
-        align-items: center;
-        padding: 0.4rem 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-        font-size: 0.75rem;
-      }
-      .troy-crm-history-intent {
-        padding: 0.1rem 0.4rem;
-        border-radius: 10px;
-        font-weight: 600;
-        text-transform: uppercase;
-        font-size: 0.6rem;
-      }
-      .troy-crm-history-intent.sale {
-        background: rgba(16, 185, 129, 0.12);
-        color: #10b981;
-      }
-      .troy-crm-history-intent.support {
-        background: rgba(245, 158, 11, 0.12);
-        color: #f59e0b;
-      }
-      .troy-crm-history-intent.info {
-        background: rgba(59, 130, 246, 0.12);
-        color: #3b82f6;
-      }
-      .troy-crm-history-intent.browsing {
-        background: rgba(107, 114, 128, 0.12);
-        color: #6b7280;
-      }
-      .troy-crm-history-time {
-        color: var(--tv-text-muted);
-      }
-      .troy-crm-history-products {
-        color: var(--tv-text-muted);
-        font-style: italic;
-      }
-      .troy-crm-empty {
-        text-align: center;
-        padding: 2rem;
-        color: var(--tv-text-muted);
-        font-size: 0.85rem;
-      }
-
-      /* Responsive */
-      @media (max-width: 600px) {
-        .troy-crm-kpis {
-          grid-template-columns: 1fr 1fr;
-        }
-        .troy-crm-kpi {
-          padding: 1rem;
-        }
-        .troy-crm-kpi-value {
-          font-size: 1.2rem;
-        }
-        .troy-crm-search {
-          font-size: 16px; /* prevents iOS zoom */
-        }
-        .wa-btn-primary {
-          min-height: 44px;
-        }
-      }
-    </style>
-  `;
-}
-
-/* ── Main Export ──────────────────────────────────────────────── */
-export function renderCRM(ctx: {
-  requestUpdate: () => void;
-  client: GatewayBrowserClient | null;
-  connected: boolean;
-}) {
-  requestUpdateFn = ctx.requestUpdate;
-  clientRef = ctx.client;
-
-  if (!initialized) {
-    loadCRM();
-    window.addEventListener("storage", (e) => {
-      if (e.key === CRM_CONTACTS_KEY || e.key === CRM_INTERACTIONS_KEY) {
-        loadCRM();
-        ctx.requestUpdate();
-      }
-    });
-    // Load WhatsApp status on first render
-    if (ctx.connected && ctx.client) {
-      void loadWhatsAppStatus();
-    }
-    initialized = true;
-  }
-
-  return html`
-    ${renderStyles()}
-    <div class="troy-crm">
-      ${renderWhatsAppPanel(ctx.connected)}
-      ${renderKPIs()}
-      ${renderPipeline()}
-      ${renderContactList()}
-      <div class="troy-crm-layout">
-        ${renderContactDetail()}
-      </div>
+          ` : nothing}
+        </div>
+      ` : nothing}
     </div>
   `;
 }

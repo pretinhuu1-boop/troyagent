@@ -152,18 +152,21 @@
 }
 
 .brand-title {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
   line-height: 1.1;
+  text-transform: uppercase;
   color: var(--text-strong);
 }
 
 .brand-sub {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--muted);
-  letter-spacing: 0.05em;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--accent);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   line-height: 1;
 }

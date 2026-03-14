@@ -42,6 +42,7 @@ import { maybeSendAckReaction } from "./ack-reaction.js";
 import { formatGroupMembers } from "./group-members.js";
 import { trackBackgroundTask, updateLastRouteInBackground } from "./last-route.js";
 import { buildInboundLine } from "./message-line.js";
+import { trackInboundMessage, trackOutboundMessage } from "../../../gateway/whatsapp-user-tracking.js";
 
 export type GroupHistoryEntry = {
   sender: string;
@@ -359,6 +360,22 @@ export async function processMessage(params: {
   });
   trackBackgroundTask(params.backgroundTasks, metaTask);
 
+  // TAURA: Track inbound message — auto-register user + log to Supabase
+  const senderPhone = normalizeE164(params.msg.senderE164 ?? params.msg.from ?? "");
+  const trackingTask = trackInboundMessage({
+    senderPhone: senderPhone ?? "",
+    senderName: params.msg.senderName,
+    messageBody: params.msg.body,
+    sessionKey: params.route.sessionKey,
+    chatType: params.msg.chatType,
+  }).catch((err) => {
+    params.replyLogger.warn(
+      { error: formatError(err) },
+      "failed tracking inbound message",
+    );
+  });
+  trackBackgroundTask(params.backgroundTasks, trackingTask);
+
   const { queuedFinal } = await dispatchReplyWithBufferedBlockDispatcher({
     ctx: ctxPayload,
     cfg: params.cfg,
@@ -392,6 +409,13 @@ export async function processMessage(params: {
           tableMode,
         });
         didSendReply = true;
+        // TAURA: Track outbound reply to Supabase
+        if (payload.text && senderPhone) {
+          trackOutboundMessage({
+            senderPhone,
+            replyText: payload.text,
+          }).catch(() => {});
+        }
         const shouldLog = payload.text ? true : undefined;
         params.rememberSentText(payload.text, {
           combinedBody,

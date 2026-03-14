@@ -113,9 +113,10 @@ export async function createWaSocket(
     version,
     logger,
     printQRInTerminal: false,
-    browser: ["openclaw", "cli", VERSION],
+    browser: ["Mac OS", "Chrome", "14.4.1"],
     syncFullHistory: false,
     markOnlineOnConnect: false,
+    defaultQueryTimeoutMs: undefined,
   });
 
   sock.ev.on("creds.update", () => enqueueSaveCreds(authDir, saveCreds, sessionLogger));

@@ -37,6 +37,7 @@ import {
   handleControlUiHttpRequest,
   type ControlUiRootState,
 } from "./control-ui.js";
+import { handleSupabaseApiRequest } from "./supabase-api.js";
 import { applyHookMappings } from "./hooks-mapping.js";
 import {
   extractHookToken,
@@ -595,6 +596,10 @@ export function createGatewayHttpServer(opts: {
         if (await canvasHost.handleHttpRequest(req, res)) {
           return;
         }
+      }
+      // TAURA Supabase API proxy
+      if (await handleSupabaseApiRequest(req, res)) {
+        return;
       }
       if (controlUiEnabled) {
         if (
