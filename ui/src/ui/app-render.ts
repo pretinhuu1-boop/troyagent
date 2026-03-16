@@ -81,6 +81,7 @@ import { renderNodes } from "./views/nodes.ts";
 import { renderOverview } from "./views/overview.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
+import { renderComando } from "./views/comando.ts";
 import { renderVendas } from "./views/vendas.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
@@ -1069,6 +1070,8 @@ export function renderApp(state: AppViewState) {
               })
             : nothing
         }
+        ${state.tab === "comando" ? renderComando({ state }) : nothing}
+
         ${state.tab === "vendas" ? renderVendas({ state }) : nothing}
 
         ${state.tab === "catalogo" ? renderCatalogo({ state }) : nothing}

@@ -24,6 +24,7 @@ export const en: TranslationMap = {
     collapse: "Collapse sidebar",
   },
   tabs: {
+    comando: "Command",
     vendas: "Sales",
     catalogo: "Catalog",
     crm: "CRM",
@@ -42,6 +43,7 @@ export const en: TranslationMap = {
     logs: "Logs",
   },
   subtitles: {
+    comando: "TAURA agent command center.",
     vendas: "Sales dashboard and store metrics.",
     catalogo: "Manage products, prices, and inventory.",
     crm: "Customers, contacts, and WhatsApp status.",

@@ -24,6 +24,7 @@ export const pt_BR: TranslationMap = {
     collapse: "Recolher barra lateral",
   },
   tabs: {
+    comando: "Comando",
     vendas: "Vendas",
     catalogo: "Catálogo",
     crm: "CRM",
@@ -42,6 +43,7 @@ export const pt_BR: TranslationMap = {
     logs: "Logs",
   },
   subtitles: {
+    comando: "Centro de comando dos agentes TAURA.",
     vendas: "Painel de vendas e métricas da loja.",
     catalogo: "Gerenciar produtos, preços e estoque.",
     crm: "Clientes, contatos e status do WhatsApp.",
