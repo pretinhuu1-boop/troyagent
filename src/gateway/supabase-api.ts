@@ -588,6 +588,73 @@ export async function handleSupabaseApiRequest(
       return true;
     }
 
+    // ═══ INSIGHTS ═══════════════════════════════════════════
+    // GET /api/insights?customer_id=xxx (auth required)
+    if (path === "/api/insights" && method === "GET") {
+      if (!isLocalRequest(req) && !isWriteAuthorized(req)) {
+        logApiAccess(method, path, clientIp, 401, false);
+        sendApiError(res, 401, "Unauthorized", origin);
+        return true;
+      }
+      const customerId = url.searchParams.get("customer_id");
+      let queryPath: string;
+      if (customerId) {
+        if (!isValidUUID(customerId)) {
+          sendApiError(res, 400, "Invalid customer_id format", origin);
+          return true;
+        }
+        queryPath = `customer_insights?customer_id=eq.${customerId}&select=*&order=created_at.desc`;
+      } else {
+        queryPath = "customer_insights?select=*&order=created_at.desc&limit=100";
+      }
+      const result = await supabaseRequest(queryPath);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // POST /api/insights (auth required)
+    if (path === "/api/insights" && method === "POST") {
+      if (!isLocalRequest(req) && !isWriteAuthorized(req)) {
+        logApiAccess(method, path, clientIp, 401, false);
+        sendApiError(res, 401, "Unauthorized", origin);
+        return true;
+      }
+      if (isWriteRateLimited(clientIp)) {
+        sendApiError(res, 429, "Rate limit exceeded", origin);
+        return true;
+      }
+      const body = await readBody(req);
+      if (body === null) {
+        sendApiError(res, 413, "Payload too large or timeout", origin);
+        return true;
+      }
+      try {
+        const parsed = JSON.parse(body);
+        // Validate required fields
+        if (!parsed.customer_id || !parsed.agent_id || !parsed.insight_type || !parsed.content) {
+          sendApiError(res, 400, "Missing required fields: customer_id, agent_id, insight_type, content", origin);
+          return true;
+        }
+        if (!isValidUUID(parsed.customer_id)) {
+          sendApiError(res, 400, "Invalid customer_id format", origin);
+          return true;
+        }
+        const validTypes = ["preference", "objection", "interest", "follow_up"];
+        if (!validTypes.includes(parsed.insight_type)) {
+          sendApiError(res, 400, `insight_type must be one of: ${validTypes.join(", ")}`, origin);
+          return true;
+        }
+      } catch {
+        sendApiError(res, 400, "Invalid JSON body", origin);
+        return true;
+      }
+      const result = await supabaseWrite("customer_insights", "POST", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
     // ═══ Method not allowed ═══════════════════════════════════
     // Explicitly reject unsupported methods on known paths
     if (path.startsWith("/api/")) {

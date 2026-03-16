@@ -45,6 +45,22 @@ services:
     networks:
       - troy-net
 
+  taura-gerador:
+    build:
+      context: ../gerador-backend
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL: http://taura-gerador:3000/auth/google/callback
+      JWT_SECRET: ${JWT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+    restart: unless-stopped
+    networks:
+      - troy-net
+
   caddy:
     image: caddy:latest
     restart: unless-stopped
