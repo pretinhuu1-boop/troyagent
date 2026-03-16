@@ -417,8 +417,11 @@ export function renderVendas(state: VendasRenderState) {
 
   return html`
     <div class="tv-dashboard">
-      <!-- Date -->
-      <div class="tv-date">${today}</div>
+      <!-- Agent Badge + Date -->
+      <div class="tv-view-header">
+        <span class="cnt-agent-badge"><span class="cnt-agent-badge__emoji">\uD83E\uDD1D</span>Troy</span>
+        <div class="tv-date">${today}</div>
+      </div>
 
       <!-- KPI Cards -->
       <div class="tv-kpi-grid">

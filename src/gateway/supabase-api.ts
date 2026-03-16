@@ -43,7 +43,9 @@ function isWriteRateLimited(ip: string): boolean {
 setInterval(() => {
   const now = Date.now();
   writeRateLimiter.forEach((entry, ip) => {
-    if (now > entry.resetAt) writeRateLimiter.delete(ip);
+    if (now > entry.resetAt) {
+      writeRateLimiter.delete(ip);
+    }
   });
 }, 120_000).unref();
 
@@ -60,14 +62,18 @@ const MAX_BODY_BYTES = 256 * 1024; // 256KB
 // ─── Security: Bearer token extraction ───────────────────────────
 function extractBearerToken(req: IncomingMessage): string | null {
   const header = req.headers["authorization"];
-  if (!header || typeof header !== "string") return null;
+  if (!header || typeof header !== "string") {
+    return null;
+  }
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match ? match[1] : null;
 }
 
 // ─── Security: Constant-time token comparison ────────────────────
 function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length) {
+    return false;
+  }
   let result = 0;
   for (let i = 0; i < a.length; i++) {
     result |= a.charCodeAt(i) ^ b.charCodeAt(i);
@@ -80,7 +86,9 @@ const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 
 function isWriteAuthorized(req: IncomingMessage): boolean {
   const token = extractBearerToken(req);
-  if (!token || !GATEWAY_TOKEN) return false;
+  if (!token || !GATEWAY_TOKEN) {
+    return false;
+  }
   return safeEqual(token, GATEWAY_TOKEN);
 }
 
@@ -92,7 +100,9 @@ function isLocalRequest(req: IncomingMessage): boolean {
 // ─── Security: CORS origin validation ────────────────────────────
 function resolveAllowedOrigin(req: IncomingMessage): string {
   const origin = req.headers["origin"];
-  if (!origin) return "";
+  if (!origin) {
+    return "";
+  }
   // Always allow localhost for development
   if (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")) {
     return origin;
@@ -252,13 +262,7 @@ function readBody(req: IncomingMessage): Promise<string | null> {
 }
 
 // ─── Security: Structured logging ────────────────────────────────
-function logApiAccess(
-  method: string,
-  path: string,
-  ip: string,
-  status: number,
-  authOk: boolean,
-) {
+function logApiAccess(method: string, path: string, ip: string, status: number, authOk: boolean) {
   // Only log write operations and auth failures to avoid log noise
   if (method !== "GET" || !authOk) {
     console.log(
@@ -632,15 +636,37 @@ export async function handleSupabaseApiRequest(
       try {
         const parsed = JSON.parse(body);
         // Validate required fields
-        if (!parsed.customer_id || !parsed.agent_id || !parsed.insight_type || !parsed.content) {
-          sendApiError(res, 400, "Missing required fields: customer_id, agent_id, insight_type, content", origin);
+        const contentInsightTypes = ["content_performance", "content_suggestion", "content_gap"];
+        const validTypes = [
+          "preference",
+          "objection",
+          "interest",
+          "follow_up",
+          ...contentInsightTypes,
+        ];
+        if (!parsed.agent_id || !parsed.insight_type || !parsed.content) {
+          sendApiError(
+            res,
+            400,
+            "Missing required fields: agent_id, insight_type, content",
+            origin,
+          );
           return true;
         }
-        if (!isValidUUID(parsed.customer_id)) {
+        const isContentInsight = contentInsightTypes.includes(parsed.insight_type);
+        if (!isContentInsight && !parsed.customer_id) {
+          sendApiError(
+            res,
+            400,
+            "Missing required field: customer_id (required for non-content insights)",
+            origin,
+          );
+          return true;
+        }
+        if (parsed.customer_id && !isContentInsight && !isValidUUID(parsed.customer_id)) {
           sendApiError(res, 400, "Invalid customer_id format", origin);
           return true;
         }
-        const validTypes = ["preference", "objection", "interest", "follow_up"];
         if (!validTypes.includes(parsed.insight_type)) {
           sendApiError(res, 400, `insight_type must be one of: ${validTypes.join(", ")}`, origin);
           return true;

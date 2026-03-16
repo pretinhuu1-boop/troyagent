@@ -68,7 +68,7 @@ async function apiFetch(path: string, options?: RequestInit) {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(options?.headers || {}),
+      ...options?.headers,
     },
   });
   if (!res.ok) {
@@ -85,7 +85,9 @@ async function fetchCustomers(): Promise<Customer[]> {
 
 /* ── Load & Refresh ──────────────────────────────────────── */
 async function loadCustomers(state: CRMState, force = false) {
-  if (loaded && !force) return;
+  if (loaded && !force) {
+    return;
+  }
   loading = true;
   error = null;
   triggerUpdate(state);
@@ -102,7 +104,9 @@ async function loadCustomers(state: CRMState, force = false) {
 }
 
 function startAutoRefresh(state: CRMState) {
-  if (refreshInterval) return;
+  if (refreshInterval) {
+    return;
+  }
   refreshInterval = window.setInterval(() => {
     loadCustomers(state, true);
   }, 30000);
@@ -139,26 +143,44 @@ function formatDate(iso: string): string {
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
-  if (min < 1) return "agora";
-  if (min < 60) return `${min}min`;
+  if (min < 1) {
+    return "agora";
+  }
+  if (min < 60) {
+    return `${min}min`;
+  }
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h`;
+  if (h < 24) {
+    return `${h}h`;
+  }
   const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d`;
+  if (d < 30) {
+    return `${d}d`;
+  }
   return `${Math.floor(d / 30)}m`;
 }
 
 function maskPhone(phone: string): string {
-  if (!phone || phone.length < 8) return phone;
+  if (!phone || phone.length < 8) {
+    return phone;
+  }
   // Show country code + last 4
-  if (phone.startsWith("+595")) return `🇵🇾 ...${phone.slice(-4)}`;
-  if (phone.startsWith("+55")) return `🇧🇷 ...${phone.slice(-4)}`;
+  if (phone.startsWith("+595")) {
+    return `🇵🇾 ...${phone.slice(-4)}`;
+  }
+  if (phone.startsWith("+55")) {
+    return `🇧🇷 ...${phone.slice(-4)}`;
+  }
   return `...${phone.slice(-4)}`;
 }
 
 function fullPhone(phone: string): string {
-  if (phone.startsWith("+595")) return `🇵🇾 ${phone}`;
-  if (phone.startsWith("+55")) return `🇧🇷 ${phone}`;
+  if (phone.startsWith("+595")) {
+    return `🇵🇾 ${phone}`;
+  }
+  if (phone.startsWith("+55")) {
+    return `🇧🇷 ${phone}`;
+  }
   return phone;
 }
 
@@ -234,7 +256,9 @@ export function renderCRM(state: CRMState) {
   const handleSave = async () => {
     const name = formFields.name.trim();
     const phone = formFields.phone.trim();
-    if (!name || !phone) return;
+    if (!name || !phone) {
+      return;
+    }
 
     const payload: any = {
       name,
@@ -277,11 +301,15 @@ export function renderCRM(state: CRMState) {
   };
 
   const confirmDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await apiFetch(`/customers/${deleteTarget.id}`, { method: "DELETE" });
       customers = customers.filter((x) => x.id !== deleteTarget!.id);
-      if (selectedId === deleteTarget.id) selectedId = null;
+      if (selectedId === deleteTarget.id) {
+        selectedId = null;
+      }
       deleteTarget = null;
       showFeedback(state);
     } catch (e: any) {
@@ -297,7 +325,9 @@ export function renderCRM(state: CRMState) {
 
   function showFeedback(st: CRMState) {
     showSavedBadge = true;
-    if (savedTimer) clearTimeout(savedTimer);
+    if (savedTimer) {
+      clearTimeout(savedTimer);
+    }
     savedTimer = window.setTimeout(() => {
       showSavedBadge = false;
       triggerUpdate(st);
@@ -307,10 +337,14 @@ export function renderCRM(state: CRMState) {
   /* ── Template ── */
   return html`
     <div class="tv-catalogo">
+      <!-- Agent Badge -->
+      <div class="tv-view-header">
+        <span class="cnt-agent-badge"><span class="cnt-agent-badge__emoji">\uD83E\uDD1D</span>Troy</span>
+      </div>
       <!-- KPI Bar -->
       <div class="tv-kpi-grid">
         <div class="tv-kpi">
-          <div class="tv-kpi-icon">👥</div>
+          <div class="tv-kpi-icon">\uD83D\uDC65</div>
           <div>
             <div class="tv-kpi-value">${customers.length}</div>
             <div class="tv-kpi-label">Total Clientes</div>
@@ -350,10 +384,27 @@ export function renderCRM(state: CRMState) {
           />
         </div>
         <div class="tv-header-actions">
-          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
-          ${loading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">⟳ Carregando...</span>` : nothing}
+          ${
+            showSavedBadge
+              ? html`
+                  <span class="tv-saved-badge">✓ Sincronizado</span>
+                `
+              : nothing
+          }
+          ${
+            loading
+              ? html`
+                  <span class="tv-saved-badge" style="border-color: rgba(52, 152, 219, 0.3); color: #3498db"
+                    >⟳ Carregando...</span
+                  >
+                `
+              : nothing
+          }
           ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ Erro</span>` : nothing}
-          <button class="tv-btn-sm" @click=${() => { loaded = false; loadCustomers(state, true); }}>🔄 Atualizar</button>
+          <button class="tv-btn-sm" @click=${() => {
+            loaded = false;
+            loadCustomers(state, true);
+          }}>🔄 Atualizar</button>
           <button class="tv-btn-gold" @click=${handleAdd}>+ Novo Cliente</button>
         </div>
       </div>
@@ -372,16 +423,22 @@ export function renderCRM(state: CRMState) {
       </div>
 
       <!-- Delete Confirmation -->
-      ${deleteTarget ? html`
+      ${
+        deleteTarget
+          ? html`
         <div class="tv-confirm-bar">
           <span>Excluir <strong>${deleteTarget.name}</strong> (${deleteTarget.phone})?</span>
           <button class="tv-btn-danger" @click=${confirmDelete}>Confirmar</button>
           <button class="tv-btn-sm" @click=${cancelDelete}>Cancelar</button>
         </div>
-      ` : nothing}
+      `
+          : nothing
+      }
 
       <!-- Customer Form -->
-      ${showForm ? html`
+      ${
+        showForm
+          ? html`
         <div class="tv-panel tv-form-panel">
           <h3>${editing ? `Editar: ${editing.name}` : "Novo Cliente"}</h3>
           <div class="tv-form-grid">
@@ -426,20 +483,29 @@ export function renderCRM(state: CRMState) {
             <button class="tv-btn-outline" @click=${handleCancel}>Cancelar</button>
           </div>
         </div>
-      ` : nothing}
+      `
+          : nothing
+      }
 
       <!-- Customer List -->
-      ${filtered.length === 0 && !loading ? html`
+      ${
+        filtered.length === 0 && !loading
+          ? html`
         <div class="tv-empty">
-          ${searchQuery || typeFilter !== "all"
-            ? "Nenhum cliente encontrado com esse filtro."
-            : "Nenhum cliente cadastrado. Clique em '+ Novo Cliente' para começar."}
+          ${
+            searchQuery || typeFilter !== "all"
+              ? "Nenhum cliente encontrado com esse filtro."
+              : "Nenhum cliente cadastrado. Clique em '+ Novo Cliente' para começar."
+          }
         </div>
-      ` : nothing}
+      `
+          : nothing
+      }
 
       <!-- Customer Grid -->
       <div class="tv-product-grid">
-        ${filtered.map((c) => html`
+        ${filtered.map(
+          (c) => html`
           <div class="tv-product-card ${selectedId === c.id ? "tv-card-selected" : ""}" @click=${handleSelect(c.id)}>
             <div class="tv-product-img" style="
               display: flex; align-items: center; justify-content: center;
@@ -467,16 +533,25 @@ export function renderCRM(state: CRMState) {
                 <span style="font-size:0.72rem;color:var(--tv-text-muted)">Atualizado: ${timeAgo(c.updated_at)}</span>
               </div>
               <div class="tv-product-actions">
-                <button class="tv-btn-sm" @click=${(e: Event) => { e.stopPropagation(); handleEdit(c); }}>✏️ Editar</button>
-                <button class="tv-btn-sm tv-btn-sm--danger" @click=${(e: Event) => { e.stopPropagation(); handleDelete(c); }}>🗑️</button>
+                <button class="tv-btn-sm" @click=${(e: Event) => {
+                  e.stopPropagation();
+                  handleEdit(c);
+                }}>✏️ Editar</button>
+                <button class="tv-btn-sm tv-btn-sm--danger" @click=${(e: Event) => {
+                  e.stopPropagation();
+                  handleDelete(c);
+                }}>🗑️</button>
               </div>
             </div>
           </div>
-        `)}
+        `,
+        )}
       </div>
 
       <!-- Selected Customer Detail -->
-      ${selected ? html`
+      ${
+        selected
+          ? html`
         <div class="tv-panel" style="border-left: 3px solid var(--accent, #6B0F1A); margin-top: 1rem;">
           <h3 style="margin: 0 0 0.75rem; font-size: 1.1rem;">${selected.name}</h3>
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
@@ -487,14 +562,20 @@ export function renderCRM(state: CRMState) {
             <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Localidade</span><br/><strong>${selected.city || "—"}${selected.state ? `, ${selected.state}` : ""}</strong></div>
             <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Cadastrado em</span><br/><strong>${formatDate(selected.created_at)}</strong></div>
           </div>
-          ${selected.notes ? html`
+          ${
+            selected.notes
+              ? html`
             <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px;">
               <span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Notas</span><br/>
               <span style="font-size: 0.85rem;">${selected.notes}</span>
             </div>
-          ` : nothing}
+          `
+              : nothing
+          }
         </div>
-      ` : nothing}
+      `
+          : nothing
+      }
     </div>
   `;
 }

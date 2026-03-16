@@ -75,10 +75,38 @@ interface CronJobSummary {
 
 /* ── Agents TAURA ────────────────────────────────────────── */
 const TAURA_AGENTS: AgentCard[] = [
-  { id: "taura-vendas", name: "Troy", emoji: "\uD83E\uDD1D", role: "Vendas", activeSessions: 0, status: "idle" },
-  { id: "taura-tecnico", name: "Dr. Troy", emoji: "\uD83E\uDDEC", role: "T\u00e9cnico", activeSessions: 0, status: "idle" },
-  { id: "taura-operacional", name: "Troy Ops", emoji: "\u2699\uFE0F", role: "Operacional", activeSessions: 0, status: "idle" },
-  { id: "taura-conteudo", name: "Troy Creative", emoji: "\u2728", role: "Conte\u00fado", activeSessions: 0, status: "idle" },
+  {
+    id: "taura-vendas",
+    name: "Troy",
+    emoji: "\uD83E\uDD1D",
+    role: "Vendas",
+    activeSessions: 0,
+    status: "idle",
+  },
+  {
+    id: "taura-tecnico",
+    name: "Dr. Troy",
+    emoji: "\uD83E\uDDEC",
+    role: "T\u00e9cnico",
+    activeSessions: 0,
+    status: "idle",
+  },
+  {
+    id: "taura-operacional",
+    name: "Troy Ops",
+    emoji: "\u2699\uFE0F",
+    role: "Operacional",
+    activeSessions: 0,
+    status: "idle",
+  },
+  {
+    id: "taura-conteudo",
+    name: "Troy Creative",
+    emoji: "\u2728",
+    role: "Conte\u00fado",
+    activeSessions: 0,
+    status: "idle",
+  },
 ];
 
 /* ── Pipeline Stages ─────────────────────────────────────── */
@@ -115,7 +143,9 @@ function loadFeed(): ActivityEvent[] {
 function loadMetrics(): DayMetrics {
   try {
     const raw = localStorage.getItem(CMD_METRICS_KEY);
-    if (raw) return JSON.parse(raw) as DayMetrics;
+    if (raw) {
+      return JSON.parse(raw) as DayMetrics;
+    }
   } catch {
     /* ignore */
   }
@@ -151,10 +181,13 @@ function renderPipelineColumn(stage: PipelineStage, customers: CustomerCard[]) {
         <span class="cmd-pipeline-col__count">${count}</span>
       </div>
       <div class="cmd-pipeline-col__cards">
-        ${customers.length === 0
-          ? html`<div class="cmd-pipeline-col__empty">--</div>`
-          : customers.slice(0, 5).map(
-              (c) => html`
+        ${
+          customers.length === 0
+            ? html`
+                <div class="cmd-pipeline-col__empty">--</div>
+              `
+            : customers.slice(0, 5).map(
+                (c) => html`
                 <div class="cmd-pipeline-card" draggable="true"
                      @dragstart=${(e: DragEvent) => {
                        e.dataTransfer?.setData("text/plain", c.id);
@@ -165,7 +198,8 @@ function renderPipelineColumn(stage: PipelineStage, customers: CustomerCard[]) {
                   ${c.lastContact ? html`<div class="cmd-pipeline-card__date">${c.lastContact}</div>` : nothing}
                 </div>
               `,
-            )}
+              )
+        }
         ${count > 5 ? html`<div class="cmd-pipeline-col__more">+${count - 5} mais</div>` : nothing}
       </div>
     </div>
@@ -265,13 +299,19 @@ export function renderComando({ state }: { state: { connected: boolean } }) {
       <!-- Header -->
       <div class="cmd-header">
         <div class="cmd-header__title">
-          <span class="cmd-header__bolt">\u26A1</span>
+          <span class="cnt-agent-badge"><span class="cnt-agent-badge__emoji">\u26A1</span>Todos</span>
           COMANDO CENTRAL
         </div>
         <div class="cmd-header__status">
-          ${isLive
-            ? html`<span class="cmd-live-badge"><span class="cmd-live-dot"></span> LIVE</span>`
-            : html`<span class="cmd-offline-badge">OFFLINE</span>`}
+          ${
+            isLive
+              ? html`
+                  <span class="cmd-live-badge"><span class="cmd-live-dot"></span> LIVE</span>
+                `
+              : html`
+                  <span class="cmd-offline-badge">OFFLINE</span>
+                `
+          }
         </div>
       </div>
 
@@ -311,9 +351,13 @@ export function renderComando({ state }: { state: { connected: boolean } }) {
           <!-- Decisions Queue -->
           <div class="tv-panel cmd-panel cmd-decisions">
             <h3 class="tv-panel__title">\uD83D\uDCCB FILA DE DECIS\u00d5ES</h3>
-            ${decisions.length === 0
-              ? html`<div class="cmd-empty">Nenhuma decis\u00e3o pendente</div>`
-              : html`<div class="cmd-decisions-list">${decisions.map((d) => renderDecisionItem(d))}</div>`}
+            ${
+              decisions.length === 0
+                ? html`
+                    <div class="cmd-empty">Nenhuma decis\u00e3o pendente</div>
+                  `
+                : html`<div class="cmd-decisions-list">${decisions.map((d) => renderDecisionItem(d))}</div>`
+            }
           </div>
 
           <!-- Bottom row: Metrics + Activity Feed -->
@@ -333,9 +377,13 @@ export function renderComando({ state }: { state: { connected: boolean } }) {
             <!-- Activity Feed -->
             <div class="tv-panel cmd-panel cmd-feed">
               <h3 class="tv-panel__title">\uD83D\uDCE1 ATIVIDADE AO VIVO</h3>
-              ${feed.length === 0
-                ? html`<div class="cmd-empty">Aguardando atividade...</div>`
-                : html`<div class="cmd-feed-list">${feed.slice(0, 20).map((e) => renderActivityItem(e))}</div>`}
+              ${
+                feed.length === 0
+                  ? html`
+                      <div class="cmd-empty">Aguardando atividade...</div>
+                    `
+                  : html`<div class="cmd-feed-list">${feed.slice(0, 20).map((e) => renderActivityItem(e))}</div>`
+              }
             </div>
           </div>
         </div>

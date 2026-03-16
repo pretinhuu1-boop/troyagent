@@ -1422,3 +1422,301 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ══════════════════════════════════════════════════════════
+   Content Intelligence — Troy Creative Panel
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Agent Badge (shared across all operacao views) ────── */
+.cnt-agent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(107, 15, 26, 0.15);
+  border: 1px solid rgba(107, 15, 26, 0.3);
+  color: var(--tv-text);
+}
+.cnt-agent-badge__emoji {
+  font-size: 0.8rem;
+}
+
+/* ── View Header (badge + date row) ──────────────────── */
+.tv-view-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* ── Content Center Layout ───────────────────────────── */
+.cnt-center {
+  padding: 16px;
+}
+.cnt-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cnt-top-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 16px;
+}
+.cnt-bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ── Calendar Grid ───────────────────────────────────── */
+.cnt-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.cnt-cal-day {
+  background: var(--tv-bg-card);
+  border: 1px solid var(--tv-border);
+  border-radius: 8px;
+  padding: 8px 6px;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color 0.2s;
+}
+.cnt-cal-day:hover {
+  border-color: var(--tv-border-strong);
+}
+.cnt-cal-day--today {
+  border-color: #6B0F1A;
+  box-shadow: 0 0 8px var(--tv-glow);
+}
+.cnt-cal-day--done {
+  border-left: 3px solid var(--tv-success);
+}
+.cnt-cal-day--wip {
+  border-left: 3px solid #D4A54A;
+}
+.cnt-cal-day__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.cnt-cal-day__name {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--tv-text-muted);
+  font-family: "JetBrains Mono", monospace;
+}
+.cnt-cal-day__num {
+  font-size: 0.7rem;
+  color: var(--tv-text-muted);
+}
+.cnt-cal-day__pillar {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cnt-cal-day__pillar-label {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  font-family: "Barlow Condensed", sans-serif;
+  text-transform: uppercase;
+}
+.cnt-cal-day__type {
+  font-size: 0.55rem;
+  color: var(--tv-text-muted);
+}
+.cnt-cal-day__status {
+  font-size: 0.7rem;
+  text-align: center;
+  color: var(--tv-success);
+}
+.cnt-cal-day__count {
+  font-size: 0.55rem;
+  color: var(--tv-text-muted);
+  text-align: center;
+}
+.cnt-cal-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 0.6rem;
+  color: var(--tv-text-muted);
+}
+
+/* ── Approval Queue ──────────────────────────────────── */
+.cnt-queue-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: #6B0F1A;
+  color: #F2EFE9;
+  font-size: 0.65rem;
+  font-weight: 700;
+  margin-left: 8px;
+}
+.cnt-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.cnt-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--tv-bg-card);
+  border: 1px solid var(--tv-border);
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+.cnt-queue-item:hover {
+  border-color: var(--tv-border-strong);
+}
+.cnt-queue-item__pillar {
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  font-family: "Barlow Condensed", sans-serif;
+  text-transform: uppercase;
+  color: #F2EFE9;
+  min-width: 32px;
+  text-align: center;
+}
+.cnt-queue-item__content {
+  flex: 1;
+  min-width: 0;
+}
+.cnt-queue-item__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cnt-queue-item__meta {
+  font-size: 0.65rem;
+  color: var(--tv-text-muted);
+}
+.cnt-queue-item__actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* ── Pillar Coverage ─────────────────────────────────── */
+.cnt-pillar-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tv-border);
+}
+.cnt-pillar-section__title {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--tv-text-muted);
+  margin-bottom: 8px;
+  font-family: "JetBrains Mono", monospace;
+}
+.cnt-pillars-coverage {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cnt-pillar-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 0.65rem;
+  font-family: "JetBrains Mono", monospace;
+}
+.cnt-pillar-badge--covered {
+  background: rgba(52, 211, 153, 0.08);
+}
+.cnt-pillar-badge--gap {
+  background: rgba(212, 165, 74, 0.08);
+  opacity: 0.6;
+}
+.cnt-pillar-badge__label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cnt-pillar-badge__count {
+  font-weight: 400;
+  color: var(--tv-text-muted);
+}
+
+/* ── Insights List ───────────────────────────────────── */
+.cnt-insights-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.cnt-insight-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  background: var(--tv-bg-card);
+  border: 1px solid var(--tv-border);
+  border-radius: 8px;
+}
+.cnt-insight-item__icon {
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+.cnt-insight-item__content {
+  flex: 1;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--tv-text);
+}
+.cnt-insight-item__date {
+  font-size: 0.6rem;
+  color: var(--tv-text-muted);
+  font-family: "JetBrains Mono", monospace;
+  flex-shrink: 0;
+}
+
+/* ── Metric Card Warning State ───────────────────────── */
+.cmd-metric-card--warn {
+  border-color: #D4A54A !important;
+}
+.cmd-metric-card--warn .cmd-metric-card__value {
+  color: #D4A54A;
+}
+
+/* ── Responsive: Content Panel ───────────────────────── */
+@media (max-width: 900px) {
+  .cnt-top-row,
+  .cnt-bottom-row {
+    grid-template-columns: 1fr;
+  }
+  .cnt-cal-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

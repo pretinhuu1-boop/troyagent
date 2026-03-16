@@ -69,7 +69,9 @@ import { renderAgents } from "./views/agents.ts";
 import { renderCatalogo } from "./views/catalogo.ts";
 import { renderChannels } from "./views/channels.ts";
 import { renderChat } from "./views/chat.ts";
+import { renderComando } from "./views/comando.ts";
 import { renderConfig } from "./views/config.ts";
+import { renderConteudo } from "./views/conteudo.ts";
 import { renderCRM } from "./views/crm.ts";
 import { renderCron } from "./views/cron.ts";
 import { renderDebug } from "./views/debug.ts";
@@ -81,7 +83,6 @@ import { renderNodes } from "./views/nodes.ts";
 import { renderOverview } from "./views/overview.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
-import { renderComando } from "./views/comando.ts";
 import { renderVendas } from "./views/vendas.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
@@ -1077,6 +1078,8 @@ export function renderApp(state: AppViewState) {
         ${state.tab === "catalogo" ? renderCatalogo({ state }) : nothing}
 
         ${state.tab === "crm" ? renderCRM({ state }) : nothing}
+
+        ${state.tab === "conteudo" ? renderConteudo({ state }) : nothing}
       </main>
 
       ${

@@ -75,7 +75,7 @@ async function apiFetch(path: string, options?: RequestInit) {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(options?.headers || {}),
+      ...options?.headers,
     },
   });
   if (!res.ok) {
@@ -110,7 +110,9 @@ async function deleteProduct(id: string): Promise<void> {
 
 /* ── Load & Refresh ──────────────────────────────────────── */
 async function loadProducts(state: CatalogoState, force = false) {
-  if (loaded && !force) return;
+  if (loaded && !force) {
+    return;
+  }
   loading = true;
   error = null;
   triggerUpdate(state);
@@ -127,7 +129,9 @@ async function loadProducts(state: CatalogoState, force = false) {
 }
 
 function startAutoRefresh(state: CatalogoState) {
-  if (refreshInterval) return;
+  if (refreshInterval) {
+    return;
+  }
   // Refresh every 30s
   refreshInterval = window.setInterval(() => {
     loadProducts(state, true);
@@ -136,7 +140,7 @@ function startAutoRefresh(state: CatalogoState) {
 
 /* ── Helpers ─────────────────────────────────────────────── */
 function categories(): string[] {
-  return [...new Set(products.map((p) => p.category))].sort();
+  return [...new Set(products.map((p) => p.category))].toSorted();
 }
 
 function filteredProducts(): Product[] {
@@ -151,7 +155,7 @@ function filteredProducts(): Product[] {
         p.name.toLowerCase().includes(q) ||
         p.sku.toLowerCase().includes(q) ||
         (p.brand || "").toLowerCase().includes(q) ||
-        (p.description || "").toLowerCase().includes(q)
+        (p.description || "").toLowerCase().includes(q),
     );
   }
   return filtered;
@@ -161,14 +165,22 @@ const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" 
 const fmtUsd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
 function stockBadgeClass(qty: number): string {
-  if (qty <= 0) return "tv-badge--sem-estoque";
-  if (qty < 10) return "tv-badge--estoque-baixo";
+  if (qty <= 0) {
+    return "tv-badge--sem-estoque";
+  }
+  if (qty < 10) {
+    return "tv-badge--estoque-baixo";
+  }
   return "tv-badge--em-estoque";
 }
 
 function stockLabel(qty: number): string {
-  if (qty <= 0) return "Sem estoque";
-  if (qty < 10) return `${qty} un. (baixo)`;
+  if (qty <= 0) {
+    return "Sem estoque";
+  }
+  if (qty < 10) {
+    return `${qty} un. (baixo)`;
+  }
   return `${qty} un.`;
 }
 
@@ -192,30 +204,44 @@ function formatIcon(format: string): string {
 
 function warehouseFlag(wh: string): string {
   switch (wh) {
-    case "PY": return "🇵🇾";
-    case "BR": return "🇧🇷";
-    case "UK": return "🇬🇧";
-    default: return "📍";
+    case "PY":
+      return "🇵🇾";
+    case "BR":
+      return "🇧🇷";
+    case "UK":
+      return "🇬🇧";
+    default:
+      return "📍";
   }
 }
 
 function categoryLabel(cat: string): string {
   switch (cat) {
-    case "peptide": return "Peptídeos";
-    case "glp1": return "GLP-1";
-    case "blend": return "Blends";
-    case "estetica": return "Estética";
-    default: return cat;
+    case "peptide":
+      return "Peptídeos";
+    case "glp1":
+      return "GLP-1";
+    case "blend":
+      return "Blends";
+    case "estetica":
+      return "Estética";
+    default:
+      return cat;
   }
 }
 
 function categoryIcon(cat: string): string {
   switch (cat) {
-    case "peptide": return "🧬";
-    case "glp1": return "💉";
-    case "blend": return "⚗️";
-    case "estetica": return "✨";
-    default: return "📋";
+    case "peptide":
+      return "🧬";
+    case "glp1":
+      return "💉";
+    case "blend":
+      return "⚗️";
+    case "estetica":
+      return "✨";
+    default:
+      return "📋";
   }
 }
 
@@ -248,9 +274,18 @@ export function renderCatalogo(state: CatalogoState) {
   const handleAdd = () => {
     editing = null;
     formFields = {
-      name: "", sku: "", price_brl: "", cost_usd: "", category: "peptide",
-      format: "vial", concentration: "", brand: "Thera Genetics",
-      description: "", stock_qty: "0", warehouse: "PY", purity: "99%+",
+      name: "",
+      sku: "",
+      price_brl: "",
+      cost_usd: "",
+      category: "peptide",
+      format: "vial",
+      concentration: "",
+      brand: "Thera Genetics",
+      description: "",
+      stock_qty: "0",
+      warehouse: "PY",
+      purity: "99%+",
       visible_to_customer: true,
     };
     showForm = true;
@@ -293,7 +328,9 @@ export function renderCatalogo(state: CatalogoState) {
   };
 
   const confirmDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await deleteProduct(deleteTarget.id);
       products = products.filter((x) => x.id !== deleteTarget!.id);
@@ -323,11 +360,18 @@ export function renderCatalogo(state: CatalogoState) {
     const cost_usd = formFields.cost_usd ? parseFloat(formFields.cost_usd) : null;
     const stock_qty = parseInt(formFields.stock_qty || "0", 10);
 
-    if (!name || !sku || !price_brl) return;
+    if (!name || !sku || !price_brl) {
+      return;
+    }
 
     const slug = sku.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const payload: any = {
-      name, sku, slug, price_brl, cost_usd, stock_qty,
+      name,
+      sku,
+      slug,
+      price_brl,
+      cost_usd,
+      stock_qty,
       category: formFields.category || "peptide",
       format: formFields.format || "vial",
       concentration: formFields.concentration || null,
@@ -339,13 +383,17 @@ export function renderCatalogo(state: CatalogoState) {
       active: true,
     };
 
-    if (editing) payload.id = editing.id;
+    if (editing) {
+      payload.id = editing.id;
+    }
 
     try {
       const result = await upsertProduct(payload);
       if (editing) {
         const idx = products.findIndex((p) => p.id === editing!.id);
-        if (idx >= 0 && result?.[0]) products[idx] = result[0];
+        if (idx >= 0 && result?.[0]) {
+          products[idx] = result[0];
+        }
       } else if (result?.[0]) {
         products.push(result[0]);
       }
@@ -360,7 +408,9 @@ export function renderCatalogo(state: CatalogoState) {
 
   function showFeedback(st: CatalogoState, _msg: string) {
     showSavedBadge = true;
-    if (savedTimer) clearTimeout(savedTimer);
+    if (savedTimer) {
+      clearTimeout(savedTimer);
+    }
     savedTimer = window.setTimeout(() => {
       showSavedBadge = false;
       triggerUpdate(st);
@@ -370,6 +420,10 @@ export function renderCatalogo(state: CatalogoState) {
   /* ── Template ── */
   return html`
     <div class="tv-catalogo">
+      <!-- Agent Badge -->
+      <div class="tv-view-header">
+        <span class="cnt-agent-badge"><span class="cnt-agent-badge__emoji">\u2699\uFE0F</span>Troy Ops</span>
+      </div>
       <!-- KPI Bar -->
       <div class="tv-kpi-grid">
         <div class="tv-kpi">
@@ -413,8 +467,22 @@ export function renderCatalogo(state: CatalogoState) {
           />
         </div>
         <div class="tv-header-actions">
-          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
-          ${loading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">⟳ Carregando...</span>` : nothing}
+          ${
+            showSavedBadge
+              ? html`
+                  <span class="tv-saved-badge">✓ Sincronizado</span>
+                `
+              : nothing
+          }
+          ${
+            loading
+              ? html`
+                  <span class="tv-saved-badge" style="border-color: rgba(52, 152, 219, 0.3); color: #3498db"
+                    >⟳ Carregando...</span
+                  >
+                `
+              : nothing
+          }
           ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ Erro</span>` : nothing}
           <button class="tv-btn-sm" @click=${handleRefresh}>🔄 Atualizar</button>
           <button class="tv-btn-gold" @click=${handleAdd}>+ Novo Produto</button>
@@ -426,29 +494,33 @@ export function renderCatalogo(state: CatalogoState) {
         <button class="tv-cat-btn ${activeCategory === "all" ? "active" : ""}" @click=${handleCategoryFilter("all")}>
           Todos <span class="tv-cat-count">${products.length}</span>
         </button>
-        ${categories().map(
-          (cat) => {
-            const count = products.filter((p) => p.category === cat).length;
-            return html`
+        ${categories().map((cat) => {
+          const count = products.filter((p) => p.category === cat).length;
+          return html`
               <button class="tv-cat-btn ${activeCategory === cat ? "active" : ""}" @click=${handleCategoryFilter(cat)}>
                 ${categoryIcon(cat)} ${categoryLabel(cat)} <span class="tv-cat-count">${count}</span>
               </button>
             `;
-          }
-        )}
+        })}
       </div>
 
       <!-- Delete Confirmation -->
-      ${deleteTarget ? html`
+      ${
+        deleteTarget
+          ? html`
         <div class="tv-confirm-bar">
           <span>Excluir <strong>${deleteTarget.name}</strong> (${deleteTarget.sku})?</span>
           <button class="tv-btn-danger" @click=${confirmDelete}>Confirmar Exclusão</button>
           <button class="tv-btn-sm" @click=${cancelDelete}>Cancelar</button>
         </div>
-      ` : nothing}
+      `
+          : nothing
+      }
 
       <!-- Product Form (add/edit) -->
-      ${showForm ? html`
+      ${
+        showForm
+          ? html`
         <div class="tv-panel tv-form-panel">
           <h3>${editing ? `Editar: ${editing.name}` : "Novo Produto"}</h3>
           <div class="tv-form-grid">
@@ -526,19 +598,28 @@ export function renderCatalogo(state: CatalogoState) {
             <button class="tv-btn-outline" @click=${handleCancel}>Cancelar</button>
           </div>
         </div>
-      ` : nothing}
+      `
+          : nothing
+      }
 
       <!-- Product Grid -->
-      ${filtered.length === 0 && !loading ? html`
+      ${
+        filtered.length === 0 && !loading
+          ? html`
         <div class="tv-empty">
-          ${searchQuery || activeCategory !== "all"
-            ? "Nenhum produto encontrado com esse filtro."
-            : "Nenhum produto cadastrado. Clique em '+ Novo Produto' para começar."}
+          ${
+            searchQuery || activeCategory !== "all"
+              ? "Nenhum produto encontrado com esse filtro."
+              : "Nenhum produto cadastrado. Clique em '+ Novo Produto' para começar."
+          }
         </div>
-      ` : nothing}
+      `
+          : nothing
+      }
 
       <div class="tv-product-grid">
-        ${filtered.map((p) => html`
+        ${filtered.map(
+          (p) => html`
           <div class="tv-product-card">
             <div class="tv-product-img" style="
               display: flex; align-items: center; justify-content: center;
@@ -568,7 +649,8 @@ export function renderCatalogo(state: CatalogoState) {
               </div>
             </div>
           </div>
-        `)}
+        `,
+        )}
       </div>
     </div>
   `;
