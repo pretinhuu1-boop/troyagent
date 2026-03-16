@@ -1,5 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { handleDisconnected } from "./app-lifecycle.ts";
+
+beforeAll(() => {
+  if (typeof globalThis.window === "undefined") {
+    (globalThis as Record<string, unknown>).window = {
+      removeEventListener: () => undefined,
+      addEventListener: () => undefined,
+    };
+  }
+});
 
 function createHost() {
   return {
