@@ -26,7 +26,7 @@ ecossistematroy.com {
     # Authenticated users (have session cookie) → proxy to gateway
     @hasSession header_regexp session Cookie troy_session=authenticated
     handle @hasSession {
-        reverse_proxy openclaw-gateway:18789
+        reverse_proxy taura-gateway:18789
     }
 
     # Everything else: serve login page (no redirect, just serve the file)
