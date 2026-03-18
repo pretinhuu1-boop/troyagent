@@ -12,6 +12,19 @@ set -euo pipefail
 
 echo "=== Configurando agentes TAURA ==="
 
+# B16: Idempotent — use config patch to merge instead of overwrite
+# Check if agents already exist
+EXISTING=$(openclaw config get agents.list 2>/dev/null || echo "[]")
+if [ "$EXISTING" != "[]" ] && [ -n "$EXISTING" ]; then
+  echo "⚠️  Agentes já configurados. Use --force para sobrescrever."
+  echo "  Existentes: $EXISTING"
+  if [ "${1:-}" != "--force" ]; then
+    echo "  Abortando. Execute com: bash $0 --force"
+    exit 0
+  fi
+  echo "  --force detectado, sobrescrevendo..."
+fi
+
 # Agent: taura-vendas (DEFAULT — receives all WhatsApp messages)
 openclaw config set agents.list '[
   {

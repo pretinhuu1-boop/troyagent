@@ -1,5 +1,10 @@
 import { html, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import DOMPurify from "dompurify";
+import { apiFetch, API_BASE } from "../utils/api.ts";
+import { debounce } from "../utils/debounce.ts";
+import { triggerUpdate, type TauraViewState } from "../utils/state.ts";
+import { showFeedback, isFeedbackVisible } from "../utils/feedback.ts";
 import {
   mountRichEditor,
   destroyRichEditor,
@@ -18,9 +23,6 @@ import {
   redo,
   isActive,
 } from "../rich-editor.ts";
-
-/* ── API Config (backend proxy) ───────────────────────────── */
-const API_BASE = "/api";
 
 /* ── Types ───────────────────────────────────────────────── */
 interface Article {
@@ -47,13 +49,6 @@ interface CalendarEntry {
   assigned_agent: string | null;
   notes: string | null;
   created_at: string;
-}
-
-interface ConteudoState {
-  state: {
-    requestUpdate?: () => void;
-  };
-  requestUpdate?: () => void;
 }
 
 /* ── State ───────────────────────────────────────────────── */
@@ -85,8 +80,6 @@ let selectedArticle: Article | null = null;
 let showForm = false;
 let editing: Article | null = null;
 let deleteTarget: Article | null = null;
-let showSavedBadge = false;
-let savedTimer: number | null = null;
 let refreshInterval: number | null = null;
 let editorMounted = false;
 
@@ -101,34 +94,8 @@ let formFields = {
   author: "",
 };
 
-/* ── Trigger Update ──────────────────────────────────────── */
-function triggerUpdate(s: ConteudoState) {
-  if (typeof s.requestUpdate === "function") {
-    s.requestUpdate();
-  } else if (s.state && typeof s.state.requestUpdate === "function") {
-    s.state.requestUpdate();
-  }
-}
-
-/* ── Gateway API ─────────────────────────────────────────── */
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
 /* ── Load & Refresh ──────────────────────────────────────── */
-async function loadArticles(state: ConteudoState, force = false) {
+async function loadArticles(state: TauraViewState, force = false) {
   if (loaded && !force) return;
   loading = true;
   error = null;
@@ -136,13 +103,14 @@ async function loadArticles(state: ConteudoState, force = false) {
   try {
     articles = (await apiFetch("/articles")) || [];
     loaded = true;
-  } catch (e: any) {
+  } catch (e: unknown) {
     // API might not exist yet — show empty state
-    if (e.message?.includes("404") || e.message?.includes("405")) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("404") || msg.includes("405")) {
       articles = [];
       loaded = true;
     } else {
-      error = e.message || "Erro ao carregar artigos";
+      error = msg || "Erro ao carregar artigos";
       console.error("[conteudo] load error:", e);
     }
   } finally {
@@ -151,7 +119,7 @@ async function loadArticles(state: ConteudoState, force = false) {
   }
 }
 
-async function loadCalendar(state: ConteudoState) {
+async function loadCalendar(state: TauraViewState) {
   try {
     calendar = (await apiFetch("/content-calendar")) || [];
   } catch {
@@ -160,15 +128,36 @@ async function loadCalendar(state: ConteudoState) {
   triggerUpdate(state);
 }
 
-function startAutoRefresh(state: ConteudoState) {
+function startAutoRefresh(state: TauraViewState) {
   if (refreshInterval) return;
   refreshInterval = window.setInterval(() => {
     loadArticles(state, true);
   }, 30000);
 }
 
+function stopAutoRefresh() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
+}
+
 /* ── Helpers ─────────────────────────────────────────────── */
+let _articleFilterCache: Article[] = [];
+let _articleFilterDeps = { search: "", statusFilter: "", categoryFilter: "", articlesLen: 0 };
+
 function filteredArticles(): Article[] {
+  const deps = { search: searchQuery, statusFilter, categoryFilter, articlesLen: articles.length };
+  if (
+    deps.search === _articleFilterDeps.search &&
+    deps.statusFilter === _articleFilterDeps.statusFilter &&
+    deps.categoryFilter === _articleFilterDeps.categoryFilter &&
+    deps.articlesLen === _articleFilterDeps.articlesLen
+  ) {
+    return _articleFilterCache;
+  }
+  _articleFilterDeps = deps;
+
   let filtered = articles;
   if (statusFilter !== "all") {
     filtered = filtered.filter((a) => a.status === statusFilter);
@@ -186,6 +175,7 @@ function filteredArticles(): Article[] {
         (a.tags || []).some((t) => t.toLowerCase().includes(q)),
     );
   }
+  _articleFilterCache = filtered;
   return filtered;
 }
 
@@ -206,21 +196,19 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-function showFeedback(st: ConteudoState) {
-  showSavedBadge = true;
-  if (savedTimer) clearTimeout(savedTimer);
-  savedTimer = window.setTimeout(() => {
-    showSavedBadge = false;
-    triggerUpdate(st);
-  }, 2500);
-}
-
 function uniqueCategories(): string[] {
   return [...new Set(articles.map((a) => a.category).filter(Boolean))].sort();
 }
 
+/* ── Debounced search ────────────────────────────────────── */
+let _debouncedSearchState: TauraViewState | null = null;
+const debouncedSearch = debounce((value: string) => {
+  searchQuery = value;
+  if (_debouncedSearchState) triggerUpdate(_debouncedSearchState);
+}, 250);
+
 /* ── Render ───────────────────────────────────────────────── */
-export function renderConteudo(state: ConteudoState) {
+export function renderConteudo(state: TauraViewState) {
   void loadArticles(state);
   startAutoRefresh(state);
 
@@ -230,9 +218,9 @@ export function renderConteudo(state: ConteudoState) {
   const categories = uniqueCategories();
 
   /* ── Handlers ── */
+  _debouncedSearchState = state;
   const handleSearch = (e: Event) => {
-    searchQuery = (e.target as HTMLInputElement).value;
-    triggerUpdate(state);
+    debouncedSearch((e.target as HTMLInputElement).value);
   };
 
   const handleStatusFilter = (s: typeof statusFilter) => () => {
@@ -286,7 +274,7 @@ export function renderConteudo(state: ConteudoState) {
   };
 
   const onField = (field: keyof typeof formFields) => (e: Event) => {
-    (formFields as any)[field] = (e.target as HTMLInputElement).value;
+    (formFields as Record<string, string>)[field] = (e.target as HTMLInputElement).value;
     if (field === "title" && !editing) {
       formFields.slug = slugify(formFields.title);
     }
@@ -304,7 +292,7 @@ export function renderConteudo(state: ConteudoState) {
     const title = formFields.title.trim();
     if (!title) return;
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       title,
       slug: formFields.slug || slugify(title),
       category: formFields.category,
@@ -345,8 +333,8 @@ export function renderConteudo(state: ConteudoState) {
       showForm = false;
       editing = null;
       showFeedback(state);
-    } catch (e: any) {
-      error = e.message;
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -364,8 +352,8 @@ export function renderConteudo(state: ConteudoState) {
       if (selectedArticle?.id === deleteTarget.id) selectedArticle = null;
       deleteTarget = null;
       showFeedback(state);
-    } catch (e: any) {
-      error = e.message;
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -456,25 +444,25 @@ export function renderConteudo(state: ConteudoState) {
             <label>Conteudo</label>
             <div class="tv-rich-editor-wrap">
               <div class="tv-rich-editor-toolbar">
-                <button title="Desfazer" @click=${() => { undo(); triggerUpdate(state); }}>↩</button>
-                <button title="Refazer" @click=${() => { redo(); triggerUpdate(state); }}>↪</button>
+                <button title="Desfazer" aria-label="Desfazer" @click=${() => { undo(); triggerUpdate(state); }}>↩</button>
+                <button title="Refazer" aria-label="Refazer" @click=${() => { redo(); triggerUpdate(state); }}>↪</button>
                 <span class="tv-toolbar-sep"></span>
-                <button class="${isActive("bold") ? "active" : ""}" title="Negrito" @click=${() => { toggleBold(); triggerUpdate(state); }}><strong>B</strong></button>
-                <button class="${isActive("italic") ? "active" : ""}" title="Italico" @click=${() => { toggleItalic(); triggerUpdate(state); }}><em>I</em></button>
-                <button class="${isActive("strike") ? "active" : ""}" title="Tachado" @click=${() => { toggleStrike(); triggerUpdate(state); }}><s>S</s></button>
+                <button class="${isActive("bold") ? "active" : ""}" title="Negrito" aria-label="Negrito" aria-pressed=${isActive("bold")} @click=${() => { toggleBold(); triggerUpdate(state); }}><strong>B</strong></button>
+                <button class="${isActive("italic") ? "active" : ""}" title="Italico" aria-label="Italico" aria-pressed=${isActive("italic")} @click=${() => { toggleItalic(); triggerUpdate(state); }}><em>I</em></button>
+                <button class="${isActive("strike") ? "active" : ""}" title="Tachado" aria-label="Tachado" aria-pressed=${isActive("strike")} @click=${() => { toggleStrike(); triggerUpdate(state); }}><s>S</s></button>
                 <span class="tv-toolbar-sep"></span>
-                <button class="${isActive("heading", { level: 2 }) ? "active" : ""}" title="Titulo H2" @click=${() => { toggleHeading(2); triggerUpdate(state); }}>H2</button>
-                <button class="${isActive("heading", { level: 3 }) ? "active" : ""}" title="Titulo H3" @click=${() => { toggleHeading(3); triggerUpdate(state); }}>H3</button>
-                <button class="${isActive("heading", { level: 4 }) ? "active" : ""}" title="Titulo H4" @click=${() => { toggleHeading(4); triggerUpdate(state); }}>H4</button>
+                <button class="${isActive("heading", { level: 2 }) ? "active" : ""}" title="Titulo H2" aria-label="Titulo H2" aria-pressed=${isActive("heading", { level: 2 })} @click=${() => { toggleHeading(2); triggerUpdate(state); }}>H2</button>
+                <button class="${isActive("heading", { level: 3 }) ? "active" : ""}" title="Titulo H3" aria-label="Titulo H3" aria-pressed=${isActive("heading", { level: 3 })} @click=${() => { toggleHeading(3); triggerUpdate(state); }}>H3</button>
+                <button class="${isActive("heading", { level: 4 }) ? "active" : ""}" title="Titulo H4" aria-label="Titulo H4" aria-pressed=${isActive("heading", { level: 4 })} @click=${() => { toggleHeading(4); triggerUpdate(state); }}>H4</button>
                 <span class="tv-toolbar-sep"></span>
-                <button class="${isActive("bulletList") ? "active" : ""}" title="Lista" @click=${() => { toggleBulletList(); triggerUpdate(state); }}>&#8226; Lista</button>
-                <button class="${isActive("orderedList") ? "active" : ""}" title="Lista numerada" @click=${() => { toggleOrderedList(); triggerUpdate(state); }}>1. Lista</button>
-                <button class="${isActive("blockquote") ? "active" : ""}" title="Citacao" @click=${() => { toggleBlockquote(); triggerUpdate(state); }}>" Citar</button>
-                <button class="${isActive("codeBlock") ? "active" : ""}" title="Bloco de codigo" @click=${() => { toggleCodeBlock(); triggerUpdate(state); }}>&lt;/&gt;</button>
+                <button class="${isActive("bulletList") ? "active" : ""}" title="Lista" aria-label="Lista" aria-pressed=${isActive("bulletList")} @click=${() => { toggleBulletList(); triggerUpdate(state); }}>&#8226; Lista</button>
+                <button class="${isActive("orderedList") ? "active" : ""}" title="Lista numerada" aria-label="Lista numerada" aria-pressed=${isActive("orderedList")} @click=${() => { toggleOrderedList(); triggerUpdate(state); }}>1. Lista</button>
+                <button class="${isActive("blockquote") ? "active" : ""}" title="Citacao" aria-label="Citacao" aria-pressed=${isActive("blockquote")} @click=${() => { toggleBlockquote(); triggerUpdate(state); }}>" Citar</button>
+                <button class="${isActive("codeBlock") ? "active" : ""}" title="Bloco de codigo" aria-label="Bloco de codigo" aria-pressed=${isActive("codeBlock")} @click=${() => { toggleCodeBlock(); triggerUpdate(state); }}>&lt;/&gt;</button>
                 <span class="tv-toolbar-sep"></span>
-                <button title="Link" @click=${() => { setLink(); triggerUpdate(state); }}>🔗</button>
-                <button title="Imagem" @click=${() => { insertImage(); triggerUpdate(state); }}>🖼</button>
-                <button title="Linha horizontal" @click=${() => { insertHR(); triggerUpdate(state); }}>—</button>
+                <button title="Link" aria-label="Link" @click=${() => { setLink(); triggerUpdate(state); }}>🔗</button>
+                <button title="Imagem" aria-label="Imagem" @click=${() => { insertImage(); triggerUpdate(state); }}>🖼</button>
+                <button title="Linha horizontal" aria-label="Linha horizontal" @click=${() => { insertHR(); triggerUpdate(state); }}>—</button>
               </div>
               <div class="tv-rich-editor-container" id="conteudo-rich-editor"></div>
             </div>
@@ -567,7 +555,7 @@ export function renderConteudo(state: ConteudoState) {
         ${selectedArticle.body_html ? html`
           <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px; max-height: 300px; overflow-y: auto;">
             <span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Preview</span><br/>
-            <div style="font-size: 0.85rem; line-height: 1.6;">${unsafeHTML(selectedArticle.body_html)}</div>
+            <div style="font-size: 0.85rem; line-height: 1.6;">${unsafeHTML(DOMPurify.sanitize(selectedArticle.body_html || ""))}</div>
           </div>
         ` : nothing}
       </div>
@@ -682,8 +670,8 @@ export function renderConteudo(state: ConteudoState) {
       calShowForm = false;
       calEditing = null;
       showFeedback(state);
-    } catch (e: any) {
-      error = e.message;
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -693,14 +681,14 @@ export function renderConteudo(state: ConteudoState) {
       await apiFetch(`/content-calendar/${entry.id}`, { method: "DELETE" });
       calendar = calendar.filter((c) => c.id !== entry.id);
       showFeedback(state);
-    } catch (e: any) {
-      error = e.message;
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
 
   const calOnField = (field: keyof typeof calFormFields) => (e: Event) => {
-    (calFormFields as any)[field] = (e.target as HTMLInputElement).value;
+    (calFormFields as Record<string, string>)[field] = (e.target as HTMLInputElement).value;
   };
 
   const todayStr = calDateStr(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
@@ -860,8 +848,8 @@ export function renderConteudo(state: ConteudoState) {
           try {
             await apiFetch("/articles/sync", { method: "POST" });
             showFeedback(state);
-          } catch (e: any) {
-            error = e.message;
+          } catch (e: unknown) {
+            error = e instanceof Error ? e.message : String(e);
             triggerUpdate(state);
           }
         }}>Sincronizar Agora</button>
@@ -931,7 +919,7 @@ export function renderConteudo(state: ConteudoState) {
           />
         </div>
         <div class="tv-header-actions">
-          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
+          ${isFeedbackVisible() ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
           ${loading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">⟳ Carregando...</span>` : nothing}
           ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ Erro</span>` : nothing}
           <button class="tv-btn-sm" @click=${() => { loaded = false; loadArticles(state, true); }}>🔄 Atualizar</button>

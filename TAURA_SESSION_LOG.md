@@ -8,7 +8,7 @@
 
 ## Status Atual do Projeto
 
-**Última atualização**: 2026-03-17 06:30 BRT
+**Última atualização**: 2026-03-18 BRT
 
 ### Infraestrutura Operacional
 - ✅ Gateway rodando na porta 19001
@@ -183,6 +183,7 @@ Plano completo em: `.claude/plans/linear-rolling-crane.md`
 | CSS badge variants | ✅ Feito | 8 novos badges (draft, published, archived, scheduled, failed, planned, writing, review) + tv-card-selected |
 | Sprint 3c — Script migracao artigos | ✅ Feito | `scripts/migrate-articles.mjs` — le articles.js e insere via API ou gera SQL |
 | Sprint 3d — Endpoint sync funcional | ✅ Feito | `POST /api/articles/sync` busca Supabase e gera articles.js |
+| Catalogo perf+UX fixes (C1,C5,C9,C19) | ✅ Feito | stopAutoRefresh cleanup, memoized filteredProducts, debounced search (300ms), form label accessibility (6 fields) |
 
 ---
 
@@ -283,4 +284,7 @@ Plano completo em: `.claude/plans/linear-rolling-crane.md`
 
 ---
 
-*Este documento é atualizado automaticamente ao final de cada task. Última sessão: 2026-03-17 05:30 BRT*
+| 2026-03-18 | Performance + UX fixes conteudo.ts | ✅ C3 stopAutoRefresh, C7 memoize filteredArticles, C8 debounced search, C17 toolbar aria-label/aria-pressed |
+| 2026-03-18 | C18 Kanban keyboard accessibility | ✅ aria-label on columns, @keydown handler on cards (ArrowLeft/Right moves task between columns, Enter/Space triggers click) |
+
+*Este documento é atualizado automaticamente ao final de cada task. Última sessão: 2026-03-18 BRT*

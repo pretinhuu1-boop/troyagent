@@ -1,4 +1,7 @@
 import { html, nothing } from "lit";
+import { apiFetch, API_BASE } from "../utils/api.ts";
+import { triggerUpdate, type TauraViewState } from "../utils/state.ts";
+import { showFeedback, isFeedbackVisible } from "../utils/feedback.ts";
 
 /* ── Gerador AI — Studio de Criacao Visual ─────────────────
  * Integra o Gerador (AI Content Studio) ao painel TAURA.
@@ -13,8 +16,6 @@ import { html, nothing } from "lit";
  *   - GET /api/gerador/gallery — Lista geracoes salvas
  *   - DELETE /api/gerador/gallery/:id — Remove geracao
  * ──────────────────────────────────────────────────────────── */
-
-const API_BASE = "/api";
 
 /** Read Gerador frontend URL from saved config, with fallback. */
 function getGeradorFrontendUrl(): string {
@@ -40,21 +41,12 @@ interface GeradorGeneration {
   created_at: string;
 }
 
-interface GeradorState {
-  state: {
-    requestUpdate?: () => void;
-  };
-  requestUpdate?: () => void;
-}
-
 /* ── State ───────────────────────────────────────────────── */
 let activeSubTab: "estudio" | "galeria" | "config" = "estudio";
 let gallery: GeradorGeneration[] = [];
 let loading = false;
 let loaded = false;
 let error: string | null = null;
-let showSavedBadge = false;
-let savedTimer: number | null = null;
 let generateForm = {
   prompt: "",
   mode: "image" as "image" | "video" | "tools",
@@ -69,34 +61,8 @@ let configForm = {
 };
 let configLoaded = false; // L5: Prevent config reload on every render
 
-/* ── Trigger Update ──────────────────────────────────────── */
-function triggerUpdate(s: GeradorState) {
-  if (typeof s.requestUpdate === "function") {
-    s.requestUpdate();
-  } else if (s.state && typeof s.state.requestUpdate === "function") {
-    s.state.requestUpdate();
-  }
-}
-
-/* ── API ─────────────────────────────────────────────────── */
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
 /* ── Load Gallery ────────────────────────────────────────── */
-async function loadGallery(state: GeradorState, force = false) {
+async function loadGallery(state: TauraViewState, force = false) {
   if (loaded && !force) return;
   loading = true;
   error = null;
@@ -105,24 +71,15 @@ async function loadGallery(state: GeradorState, force = false) {
     const result = await apiFetch("/gerador/gallery");
     gallery = result || [];
     loaded = true;
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Gallery table might not exist yet — that's OK
     gallery = [];
     loaded = true;
-    console.warn("[gerador] gallery load:", e.message);
+    console.warn("[gerador] gallery load:", e instanceof Error ? e.message : String(e));
   } finally {
     loading = false;
     triggerUpdate(state);
   }
-}
-
-function showFeedback(st: GeradorState) {
-  showSavedBadge = true;
-  if (savedTimer) clearTimeout(savedTimer);
-  savedTimer = window.setTimeout(() => {
-    showSavedBadge = false;
-    triggerUpdate(st);
-  }, 2500);
 }
 
 /* ── Helpers ─────────────────────────────────────────────── */
@@ -146,7 +103,7 @@ function modeIcon(mode: string): string {
 }
 
 /* ── Render ───────────────────────────────────────────────── */
-export function renderGerador(state: GeradorState) {
+export function renderGerador(state: TauraViewState) {
   void loadGallery(state);
 
   // L5: Load saved config from localStorage only once (not on every render)
@@ -212,7 +169,7 @@ export function renderGerador(state: GeradorState) {
         </div>
         <div class="tv-config-field">
           <label>Modo</label>
-          <select .value=${generateForm.mode} @change=${(e: Event) => { generateForm.mode = (e.target as HTMLSelectElement).value as any; }}>
+          <select .value=${generateForm.mode} @change=${(e: Event) => { generateForm.mode = (e.target as HTMLSelectElement).value as "image" | "video" | "tools"; }}>
             <option value="image">🖼️ Imagem</option>
             <option value="video">🎬 Video</option>
             <option value="tools">🔧 Ferramentas</option>
@@ -250,8 +207,8 @@ export function renderGerador(state: GeradorState) {
                 showFeedback(state);
                 generateForm.prompt = "";
               }
-            } catch (e: any) {
-              error = `Falha na geracao: ${e.message}`;
+            } catch (e: unknown) {
+              error = `Falha na geracao: ${e instanceof Error ? e.message : String(e)}`;
             }
             generating = false;
             triggerUpdate(state);
@@ -304,7 +261,7 @@ export function renderGerador(state: GeradorState) {
                     await apiFetch(`/gerador/gallery/${g.id}`, { method: "DELETE" });
                     gallery = gallery.filter((x) => x.id !== g.id);
                     showFeedback(state);
-                  } catch (e: any) { error = e.message; }
+                  } catch (e: unknown) { error = e instanceof Error ? e.message : String(e); }
                   triggerUpdate(state);
                 }}>🗑️</button>
               </div>
@@ -333,10 +290,9 @@ export function renderGerador(state: GeradorState) {
       <div class="tv-form-grid" style="margin-top:1rem;">
         <div class="tv-config-field" style="grid-column: span 2;">
           <label>Gemini API Key</label>
-          <input type="password" .value=${configForm.gemini_api_key}
-            @input=${(e: Event) => { configForm.gemini_api_key = (e.target as HTMLInputElement).value; }}
-            placeholder="AIza..." />
-          <small style="color:var(--tv-text-muted);">Obtenha em <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#3b82f6;">aistudio.google.com/apikey</a></small>
+          <input type="password" .value=${"••••••••"} disabled
+            placeholder="Gerenciada pelo backend" />
+          <small style="color:var(--tv-text-muted);">🔒 A chave API e gerenciada pela variavel de ambiente <code>GEMINI_API_KEY</code> no backend — nao salva no navegador. Obtenha em <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#3b82f6;">aistudio.google.com/apikey</a></small>
         </div>
         <div class="tv-config-field" style="grid-column: span 2;">
           <label>URL do Gerador Frontend</label>
@@ -348,7 +304,9 @@ export function renderGerador(state: GeradorState) {
       </div>
       <div class="tv-config-actions" style="margin-top:1rem;">
         <button class="tv-btn-gold" @click=${() => {
-          localStorage.setItem("taura_gerador_config", JSON.stringify(configForm));
+          // A9: Only persist non-sensitive config — API key stays on backend only
+          const safeConfig = { frontend_url: configForm.frontend_url };
+          localStorage.setItem("taura_gerador_config", JSON.stringify(safeConfig));
           showFeedback(state);
           triggerUpdate(state);
         }}>Salvar Configuracoes</button>
@@ -421,7 +379,7 @@ export function renderGerador(state: GeradorState) {
       <div class="tv-panel-header">
         <div></div>
         <div class="tv-header-actions">
-          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Salvo</span>` : nothing}
+          ${isFeedbackVisible() ? html`<span class="tv-saved-badge">✓ Salvo</span>` : nothing}
           ${loading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">⟳ Carregando...</span>` : nothing}
           ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ Erro</span>` : nothing}
         </div>

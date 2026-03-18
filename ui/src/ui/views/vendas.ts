@@ -1,4 +1,6 @@
 import { html, nothing } from "lit";
+import { apiFetch, API_BASE } from "../utils/api.ts";
+import { triggerUpdate, type TauraViewState } from "../utils/state.ts";
 
 /* ── Relationship with Canvas Dashboard ──────────────────────────
  * A parallel Canvas version exists at `src/canvas-host/vape-dashboard/dashboard.js`.
@@ -6,9 +8,6 @@ import { html, nothing } from "lit";
  * Both share the same localStorage keys for config/feed/metrics and stay in sync.
  * Orders are now persisted in Supabase via /api/orders (Sprint 0b migration).
  * ────────────────────────────────────────────────────────────── */
-
-/* ── API Config ──────────────────────────────────────────────── */
-const API_BASE = "/api";
 
 /* ── Storage Keys (config/feed/metrics only — orders moved to API) */
 const FEED_KEY = "troy_vape_feed";
@@ -124,23 +123,6 @@ function syncFormFromConfig() {
 
 /* ── Cross-tab sync keys (config/feed/metrics only) ──────────── */
 const SYNC_KEYS = new Set([FEED_KEY, METRICS_KEY, CONFIG_KEY]);
-
-/* ── API helpers ─────────────────────────────────────────────── */
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
 
 /* ── Persistence ─────────────────────────────────────────────── */
 let ordersLoading = false;
@@ -456,20 +438,7 @@ function kpis() {
 }
 
 /* ── Render (pure Lit html) ──────────────────────────────────── */
-export interface VendasRenderState {
-  state: {
-    requestUpdate?: () => void;
-  };
-  requestUpdate?: () => void;
-}
-
-function triggerUpdate(s: VendasRenderState) {
-  if (typeof s.requestUpdate === "function") {
-    s.requestUpdate();
-  } else if (s.state && typeof s.state.requestUpdate === "function") {
-    s.state.requestUpdate();
-  }
-}
+export type VendasRenderState = TauraViewState;
 
 export function renderVendas(s: VendasRenderState) {
   const updater = () => triggerUpdate(s);

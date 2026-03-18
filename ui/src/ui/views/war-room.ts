@@ -1,7 +1,8 @@
 import { html, nothing } from "lit";
-
-/* ── API Config (backend proxy) ───────────────────────────── */
-const API_BASE = "/api";
+import { apiFetch, API_BASE } from "../utils/api.ts";
+import { triggerUpdate, type TauraViewState } from "../utils/state.ts";
+import { showFeedback, isFeedbackVisible } from "../utils/feedback.ts";
+import { statusColor, statusLabel, type MissionStatus } from "../utils/status.ts";
 
 /* ── Types ───────────────────────────────────────────────── */
 interface Mission {
@@ -60,14 +61,6 @@ interface WarRoomState {
   presenceEntries?: PresenceEntry[];
 }
 
-function triggerUpdate(s: WarRoomState) {
-  if (typeof s.requestUpdate === "function") {
-    s.requestUpdate();
-  } else if (s.state && typeof s.state.requestUpdate === "function") {
-    s.state.requestUpdate();
-  }
-}
-
 /* ── Agents Config ───────────────────────────────────────── */
 const DEFAULT_AGENTS: AgentInfo[] = [
   { id: "dev", name: "C3-PO", emoji: "🤖", description: "Desenvolvimento e integracao", skills: ["TypeScript", "Node.js", "APIs", "DevOps"] },
@@ -112,28 +105,9 @@ let allTasks: { task: MissionTask; missionTitle: string; missionId: string }[] =
 let loading = false;
 let loaded = false;
 let error: string | null = null;
-let showSavedBadge = false;
-let savedTimer: number | null = null;
 let lastKnownEventCount = 0;
 let dragTaskId: string | null = null;
 let dragOverColumn: string | null = null;
-
-/* ── Gateway API ─────────────────────────────────────────── */
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
 
 /* ── Data Loading ────────────────────────────────────────── */
 async function loadWarRoomData(state: WarRoomState, force = false) {
@@ -157,8 +131,8 @@ async function loadWarRoomData(state: WarRoomState, force = false) {
     const taskResults = await Promise.all(taskPromises);
     allTasks = taskResults.flat();
     loaded = true;
-  } catch (e: any) {
-    error = e.message || "Erro ao carregar dados do War Room";
+  } catch (e: unknown) {
+    error = (e instanceof Error ? e.message : String(e)) || "Erro ao carregar dados do War Room";
     console.error("[war-room] load error:", e);
   } finally {
     loading = false;
@@ -167,39 +141,6 @@ async function loadWarRoomData(state: WarRoomState, force = false) {
 }
 
 /* ── Helpers ─────────────────────────────────────────────── */
-function showFeedback(st: WarRoomState, _msg: string) {
-  showSavedBadge = true;
-  if (savedTimer) clearTimeout(savedTimer);
-  savedTimer = window.setTimeout(() => {
-    showSavedBadge = false;
-    triggerUpdate(st);
-  }, 2500);
-}
-
-function statusColor(status: Mission["status"]): string {
-  switch (status) {
-    case "draft": return "#95a5a6";
-    case "discussing": return "#3498db";
-    case "approved": return "#2ecc71";
-    case "executing": return "#f39c12";
-    case "completed": return "#27ae60";
-    case "cancelled": return "#e74c3c";
-    default: return "#95a5a6";
-  }
-}
-
-function statusLabel(status: Mission["status"]): string {
-  switch (status) {
-    case "draft": return "Rascunho";
-    case "discussing": return "Em Discussao";
-    case "approved": return "Aprovada";
-    case "executing": return "Executando";
-    case "completed": return "Concluida";
-    case "cancelled": return "Cancelada";
-    default: return status;
-  }
-}
-
 /** Determine agent status color from live presence data */
 function agentStatusColor(agentId: string, presence: PresenceEntry[]): string {
   // Check if agent has active sessions in presence data
@@ -300,6 +241,9 @@ function kanbanCompleted(): { task: MissionTask; missionTitle: string; missionId
   return allTasks.filter((t) => t.task.status === "done");
 }
 
+/* ── Keyboard Navigation ────────────────────────────────── */
+const KANBAN_STATUS_ORDER: MissionTask["status"][] = ["pending", "in_progress", "review", "done"];
+
 /* ── Render ───────────────────────────────────────────────── */
 export function renderWarRoom(state: WarRoomState) {
   void loadWarRoomData(state);
@@ -332,9 +276,9 @@ export function renderWarRoom(state: WarRoomState) {
         body: JSON.stringify({ status: newStatus }),
       });
       task.status = newStatus;
-      showFeedback(state, "Tarefa atualizada");
-    } catch (e: any) {
-      error = e.message;
+      showFeedback(state);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -410,8 +354,24 @@ export function renderWarRoom(state: WarRoomState) {
     onDragEnd();
   };
 
+  const onCardKeydown = (task: MissionTask, missionId: string) => (e: KeyboardEvent) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const idx = KANBAN_STATUS_ORDER.indexOf(task.status);
+      if (idx === -1) return;
+      const nextIdx = e.key === "ArrowRight" ? idx + 1 : idx - 1;
+      if (nextIdx < 0 || nextIdx >= KANBAN_STATUS_ORDER.length) return;
+      handleChangeTaskStatus(task, missionId, KANBAN_STATUS_ORDER[nextIdx])();
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement)?.click();
+    }
+  };
+
   const renderKanbanColumn = (title: string, icon: string, items: { task: MissionTask; missionTitle: string; missionId: string }[], color: string, colStatus: MissionTask["status"]) => html`
     <div class="tv-kanban-col" data-col-status=${colStatus}
+      role="list"
+      aria-label="${title}"
       @dragover=${onDragOver(colStatus)}
       @dragleave=${onDragLeave(colStatus)}
       @drop=${onDrop(colStatus)}>
@@ -421,11 +381,14 @@ export function renderWarRoom(state: WarRoomState) {
         <span class="tv-cat-count" style="margin-left:auto">${items.length}</span>
       </div>
       ${items.length === 0 ? html`<div class="tv-kanban-empty">Arraste tarefas aqui</div>` : nothing}
-      ${items.map(({ task, missionTitle }) => html`
+      ${items.map(({ task, missionTitle, missionId }) => html`
         <div class="tv-kanban-card" data-task-id=${task.id}
           draggable="true"
+          tabindex="0"
+          role="listitem"
           @dragstart=${onDragStart(task.id)}
-          @dragend=${onDragEnd}>
+          @dragend=${onDragEnd}
+          @keydown=${onCardKeydown(task, missionId)}>
           <div class="tv-kanban-card-grip">⠿</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:0.82rem;font-weight:600;margin-bottom:4px">${task.title}</div>
@@ -443,7 +406,7 @@ export function renderWarRoom(state: WarRoomState) {
       <!-- Header -->
       <div class="tv-panel-header">
         <div class="tv-header-actions">
-          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
+          ${isFeedbackVisible() ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
           ${loading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">⟳ Carregando...</span>` : nothing}
           ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ Erro</span>` : nothing}
           <button class="tv-btn-sm" @click=${handleRefresh}>🔄 Atualizar</button>

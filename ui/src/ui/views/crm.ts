@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
-
-/* ── API Config (backend proxy) ───────────────────────────── */
-const API_BASE = "/api";
+import { apiFetch, API_BASE } from "../utils/api.ts";
+import { triggerUpdate, type TauraViewState } from "../utils/state.ts";
+import { debounce } from "../utils/debounce.ts";
 
 /* ── Types ───────────────────────────────────────────────── */
 interface Customer {
@@ -38,13 +38,6 @@ interface Message {
   created_at: string;
 }
 
-interface CRMState {
-  state: {
-    requestUpdate?: () => void;
-  };
-  requestUpdate?: () => void;
-}
-
 /* ── State ───────────────────────────────────────────────── */
 let customers: Customer[] = [];
 let loading = false;
@@ -71,6 +64,12 @@ let conversationMessages: Message[] = [];
 let messagesLoading = false;
 let conversationsRefreshInterval: number | null = null;
 let messageSearchQuery = ""; // L3: search in messages
+/** C10: Debounced search handler for customer search input */
+let _crmSearchState: TauraViewState | null = null;
+const debouncedCustomerSearch = debounce((value: string) => {
+  searchQuery = value;
+  if (_crmSearchState) triggerUpdate(_crmSearchState);
+}, 300);
 let messagesPageSize = 20; // L4: pagination
 let messagesShowAll = false;
 
@@ -85,38 +84,12 @@ let formFields = {
   notes: "",
 };
 
-/* ── Trigger Update (handles { state } wrapper pattern) ─── */
-function triggerUpdate(s: CRMState) {
-  if (typeof s.requestUpdate === "function") {
-    s.requestUpdate();
-  } else if (s.state && typeof s.state.requestUpdate === "function") {
-    s.state.requestUpdate();
-  }
-}
-
-/* ── Gateway API ─────────────────────────────────────────── */
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
 async function fetchCustomers(): Promise<Customer[]> {
   return apiFetch("/customers");
 }
 
 /* ── Load & Refresh ──────────────────────────────────────── */
-async function loadCustomers(state: CRMState, force = false) {
+async function loadCustomers(state: TauraViewState, force = false) {
   if (loaded && !force) return;
   loading = true;
   error = null;
@@ -124,8 +97,8 @@ async function loadCustomers(state: CRMState, force = false) {
   try {
     customers = await fetchCustomers();
     loaded = true;
-  } catch (e: any) {
-    error = e.message || "Erro ao carregar clientes";
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : String(e) || "Erro ao carregar clientes";
     console.error("[crm] load error:", e);
   } finally {
     loading = false;
@@ -133,7 +106,7 @@ async function loadCustomers(state: CRMState, force = false) {
   }
 }
 
-function startAutoRefresh(state: CRMState) {
+function startAutoRefresh(state: TauraViewState) {
   if (refreshInterval) return;
   refreshInterval = window.setInterval(() => {
     loadCustomers(state, true);
@@ -141,7 +114,7 @@ function startAutoRefresh(state: CRMState) {
 }
 
 /* ── Conversations Load & Refresh ─────────────────────────── */
-async function loadConversations(state: CRMState, force = false) {
+async function loadConversations(state: TauraViewState, force = false) {
   if (conversationsLoaded && !force) return;
   conversationsLoading = true;
   conversationsError = null;
@@ -149,8 +122,8 @@ async function loadConversations(state: CRMState, force = false) {
   try {
     conversations = await apiFetch("/conversations");
     conversationsLoaded = true;
-  } catch (e: any) {
-    conversationsError = e.message || "Erro ao carregar conversas";
+  } catch (e: unknown) {
+    conversationsError = e instanceof Error ? e.message : String(e) || "Erro ao carregar conversas";
     console.error("[crm] conversations load error:", e);
   } finally {
     conversationsLoading = false;
@@ -158,12 +131,12 @@ async function loadConversations(state: CRMState, force = false) {
   }
 }
 
-async function loadMessages(state: CRMState, conversationId: string) {
+async function loadMessages(state: TauraViewState, conversationId: string) {
   messagesLoading = true;
   triggerUpdate(state);
   try {
     conversationMessages = await apiFetch(`/messages?conversation_id=${conversationId}`);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("[crm] messages load error:", e);
     conversationMessages = [];
   } finally {
@@ -172,7 +145,7 @@ async function loadMessages(state: CRMState, conversationId: string) {
   }
 }
 
-function startConversationsAutoRefresh(state: CRMState) {
+function startConversationsAutoRefresh(state: TauraViewState) {
   if (conversationsRefreshInterval) return;
   conversationsRefreshInterval = window.setInterval(() => {
     loadConversations(state, true);
@@ -182,8 +155,29 @@ function startConversationsAutoRefresh(state: CRMState) {
   }, 15000);
 }
 
+/** C2: Stop all auto-refresh intervals when leaving view */
+function stopAllRefreshIntervals() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
+  if (conversationsRefreshInterval) {
+    clearInterval(conversationsRefreshInterval);
+    conversationsRefreshInterval = null;
+  }
+}
+
 /* ── Helpers ─────────────────────────────────────────────── */
+/** C6: Memoize filtered customers to avoid re-filtering on every render */
+let _customerFilterCache: Customer[] = [];
+let _customerFilterDeps = { searchQuery: "", typeFilter: "all" as string, customersLen: 0 };
+
 function filteredCustomers(): Customer[] {
+  if (searchQuery === _customerFilterDeps.searchQuery &&
+      typeFilter === _customerFilterDeps.typeFilter &&
+      customers.length === _customerFilterDeps.customersLen) {
+    return _customerFilterCache;
+  }
   let filtered = customers;
   if (typeFilter !== "all") {
     filtered = filtered.filter((c) => c.type === typeFilter);
@@ -199,6 +193,8 @@ function filteredCustomers(): Customer[] {
         (c.city || "").toLowerCase().includes(q),
     );
   }
+  _customerFilterDeps = { searchQuery, typeFilter, customersLen: customers.length };
+  _customerFilterCache = filtered;
   return filtered;
 }
 
@@ -275,7 +271,7 @@ function fullPhone(phone: string): string {
 }
 
 /* ── Render ───────────────────────────────────────────────── */
-export function renderCRM(state: CRMState) {
+export function renderCRM(state: TauraViewState) {
   void loadCustomers(state);
   startAutoRefresh(state);
 
@@ -324,9 +320,10 @@ export function renderCRM(state: CRMState) {
   };
 
   /* ── Handlers ── */
+  /** C10: Use debounced search to avoid re-filtering on every keystroke */
+  _crmSearchState = state;
   const handleSearch = (e: Event) => {
-    searchQuery = (e.target as HTMLInputElement).value;
-    triggerUpdate(state);
+    debouncedCustomerSearch((e.target as HTMLInputElement).value);
   };
 
   const handleTypeFilter = (t: "all" | "b2c" | "b2b") => () => {
@@ -372,7 +369,7 @@ export function renderCRM(state: CRMState) {
   };
 
   const onField = (field: keyof typeof formFields) => (e: Event) => {
-    (formFields as any)[field] = (e.target as HTMLInputElement).value;
+    (formFields as Record<string, string>)[field] = (e.target as HTMLInputElement).value;
   };
 
   const handleCancel = () => {
@@ -386,7 +383,7 @@ export function renderCRM(state: CRMState) {
     const phone = formFields.phone.trim();
     if (!name || !phone) return;
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       name,
       phone,
       email: formFields.email || null,
@@ -423,8 +420,8 @@ export function renderCRM(state: CRMState) {
       showForm = false;
       editing = null;
       showFeedback(state);
-    } catch (e: any) {
-      error = e.message;
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -442,8 +439,8 @@ export function renderCRM(state: CRMState) {
       if (selectedId === deleteTarget.id) selectedId = null;
       deleteTarget = null;
       showFeedback(state);
-    } catch (e: any) {
-      error = e.message;
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -453,7 +450,7 @@ export function renderCRM(state: CRMState) {
     triggerUpdate(state);
   };
 
-  function showFeedback(st: CRMState) {
+  function showFeedback(st: TauraViewState) {
     showSavedBadge = true;
     if (savedTimer) clearTimeout(savedTimer);
     savedTimer = window.setTimeout(() => {

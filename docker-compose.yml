@@ -21,6 +21,12 @@ services:
     init: true
     restart: unless-stopped
     command: [ "node", "dist/index.js", "gateway", "--bind", "${OPENCLAW_GATEWAY_BIND:-lan}", "--port", "18789", "--allow-unconfigured", "--token", "${OPENCLAW_GATEWAY_TOKEN}" ]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:18789/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - troy-net
 
@@ -64,9 +70,9 @@ services:
   postiz:
     image: ghcr.io/gitroomhq/postiz-app:latest
     environment:
-      DATABASE_URL: postgresql://postiz:postiz@postiz-db:5432/postiz
+      DATABASE_URL: postgresql://${POSTIZ_DB_USER:-postiz}:${POSTIZ_DB_PASSWORD:?missing}@postiz-db:5432/postiz
       REDIS_URL: redis://postiz-redis:6379
-      JWT_SECRET: ${POSTIZ_JWT_SECRET:-taura-postiz-secret-change-me}
+      JWT_SECRET: ${POSTIZ_JWT_SECRET:?Set POSTIZ_JWT_SECRET in .env — generate a unique secret}
       FRONTEND_URL: http://localhost:4200
       NEXT_PUBLIC_BACKEND_URL: http://localhost:3000
       BACKEND_INTERNAL_URL: http://localhost:3000
@@ -87,12 +93,13 @@ services:
     restart: unless-stopped
     networks:
       - troy-net
+      - db-net
 
   postiz-db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: postiz
-      POSTGRES_PASSWORD: postiz
+      POSTGRES_USER: ${POSTIZ_DB_USER:-postiz}
+      POSTGRES_PASSWORD: ${POSTIZ_DB_PASSWORD:?Set POSTIZ_DB_PASSWORD in .env — do NOT use defaults}
       POSTGRES_DB: postiz
     volumes:
       - postiz_db_data:/var/lib/postgresql/data
@@ -101,9 +108,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: on-failure:5
     networks:
-      - troy-net
+      - db-net
 
   postiz-redis:
     image: redis:7-alpine
@@ -116,7 +123,7 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - troy-net
+      - db-net
 
   caddy:
     image: caddy:latest
@@ -141,6 +148,9 @@ networks:
     ipam:
       config:
         - subnet: 172.28.0.0/16
+  db-net:
+    driver: bridge
+    internal: true
 
 volumes:
   caddy_data:

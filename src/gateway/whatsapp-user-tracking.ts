@@ -2,22 +2,58 @@
  * WhatsApp User Tracking & Conversation Logging
  * Auto-registers WhatsApp users in the customers table and logs conversations/messages.
  * Runs as background tasks to avoid blocking message processing.
+ *
+ * Security fixes (Fase A):
+ *  A1 — LRU cache with TTL (prevents unbounded memory growth)
+ *  A2 — UPSERT pattern for ensureCustomer (prevents race-condition duplicates)
+ *  A3 — UPSERT pattern for ensureConversation (prevents duplicate active convos)
+ *  B12 — Phone format validation (E.164)
+ *  B13 — Name update failure logging (no silent swallow)
+ *  B14 — Content sanitization (strip HTML, null bytes)
  */
 import https from "node:https";
+import http from "node:http";
+import { LRUCache } from "./lru-cache.ts";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://coiwajcdvqbrxbshdnwl.supabase.co";
 const SUPABASE_KEY = process.env.SUPABASE_KEY || "";
 
-// In-memory cache to avoid hitting Supabase on every message
-const knownPhones = new Map<string, string>(); // phone -> customer_id
-const activeConversations = new Map<string, string>(); // phone -> conversation_id
+// A1: LRU cache with max 10K entries + 24h TTL (was unbounded Map)
+const knownPhones = new LRUCache<string, string>(10_000, 86_400_000); // phone -> customer_id
+const activeConversations = new LRUCache<string, string>(10_000, 86_400_000); // phone -> conversation_id
+
+// Periodic prune (every 10 minutes)
+setInterval(() => {
+  const prunedPhones = knownPhones.prune();
+  const prunedConvos = activeConversations.prune();
+  if (prunedPhones + prunedConvos > 0) {
+    console.log(
+      `[TAURA-TRACK] Cache pruned: ${prunedPhones} phones, ${prunedConvos} conversations`,
+    );
+  }
+}, 600_000).unref();
+
+// B12: Phone format validation (E.164)
+const PHONE_RE = /^\+?[1-9]\d{1,14}$/;
+function isValidPhone(phone: string): boolean {
+  return PHONE_RE.test(phone.replace(/[\s\-()]/g, ""));
+}
+
+// B14: Content sanitization
+function sanitizeContent(content: string): string {
+  return content
+    .replace(/<[^>]*>/g, "") // Strip HTML tags
+    .replace(/\0/g, "") // Remove null bytes
+    .substring(0, 10_000); // Length limit
+}
 
 function supabaseGet(path: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const url = new URL(`/rest/v1/${path}`, SUPABASE_URL);
+    const isHttps = url.protocol === "https:";
     const options = {
       hostname: url.hostname,
-      port: 443,
+      port: url.port ? Number(url.port) : isHttps ? 443 : 80,
       path: url.pathname + url.search,
       method: "GET",
       headers: {
@@ -26,7 +62,8 @@ function supabaseGet(path: string): Promise<{ status: number; body: string }> {
         "Content-Type": "application/json",
       },
     };
-    const req = https.request(options, (response) => {
+    const transport = isHttps ? https : http;
+    const req = transport.request(options, (response) => {
       let data = "";
       response.on("data", (chunk: Buffer) => {
         data += chunk.toString();
@@ -35,7 +72,10 @@ function supabaseGet(path: string): Promise<{ status: number; body: string }> {
         resolve({ status: response.statusCode ?? 500, body: data });
       });
     });
-    req.on("error", reject);
+    req.on("error", (err) => {
+      console.error("[TAURA-TRACK] Supabase GET error:", err.message);
+      reject(err);
+    });
     req.end();
   });
 }
@@ -44,12 +84,14 @@ function supabaseWrite(
   path: string,
   method: string,
   body: string,
+  extraHeaders?: Record<string, string>,
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const url = new URL(`/rest/v1/${path}`, SUPABASE_URL);
+    const isHttps = url.protocol === "https:";
     const options = {
       hostname: url.hostname,
-      port: 443,
+      port: url.port ? Number(url.port) : isHttps ? 443 : 80,
       path: url.pathname + url.search,
       method,
       headers: {
@@ -57,9 +99,11 @@ function supabaseWrite(
         Authorization: `Bearer ${SUPABASE_KEY}`,
         "Content-Type": "application/json",
         Prefer: "return=representation",
+        ...extraHeaders,
       },
     };
-    const req = https.request(options, (response) => {
+    const transport = isHttps ? https : http;
+    const req = transport.request(options, (response) => {
       let data = "";
       response.on("data", (chunk: Buffer) => {
         data += chunk.toString();
@@ -68,7 +112,10 @@ function supabaseWrite(
         resolve({ status: response.statusCode ?? 500, body: data });
       });
     });
-    req.on("error", reject);
+    req.on("error", (err) => {
+      console.error("[TAURA-TRACK] Supabase write error:", err.message);
+      reject(err);
+    });
     if (body) req.write(body);
     req.end();
   });
@@ -76,7 +123,8 @@ function supabaseWrite(
 
 /**
  * Find or create a customer by phone number.
- * Returns the customer ID.
+ * A2: Uses UPSERT via Prefer: resolution=merge-duplicates to prevent race condition duplicates.
+ * Relies on UNIQUE index on customers(phone).
  */
 async function ensureCustomer(phone: string, name?: string): Promise<string> {
   // Check cache first
@@ -93,19 +141,21 @@ async function ensureCustomer(phone: string, name?: string): Promise<string> {
       const id = rows[0].id;
       knownPhones.set(phone, id);
 
-      // Update name if we have a new one and existing is empty
+      // B13: Update name if we have a new one and existing is empty (with logging)
       if (name && !rows[0].name) {
         await supabaseWrite(
           `customers?id=eq.${id}`,
           "PATCH",
           JSON.stringify({ name, updated_at: new Date().toISOString() }),
-        ).catch(() => {});
+        ).catch((e) =>
+          console.warn("[TAURA-TRACK] Name update failed:", e.message),
+        );
       }
       return id;
     }
   }
 
-  // Create new customer
+  // A2: Create with UPSERT — if another request already created, merge instead of error
   const newCustomer = {
     name: name || phone,
     phone,
@@ -116,9 +166,23 @@ async function ensureCustomer(phone: string, name?: string): Promise<string> {
     "customers",
     "POST",
     JSON.stringify(newCustomer),
+    { Prefer: "return=representation,resolution=merge-duplicates" },
   );
-  if (createResult.status === 201 || createResult.status === 200) {
-    const rows = JSON.parse(createResult.body);
+  if (
+    createResult.status === 201 ||
+    createResult.status === 200 ||
+    createResult.status === 409
+  ) {
+    let rows: any[];
+    try {
+      rows = JSON.parse(createResult.body);
+    } catch {
+      // 409 conflict — fetch the existing record
+      const retry = await supabaseGet(
+        `customers?phone=eq.${encodeURIComponent(phone)}&select=id&limit=1`,
+      );
+      rows = JSON.parse(retry.body);
+    }
     if (rows.length > 0) {
       const id = rows[0].id;
       knownPhones.set(phone, id);
@@ -129,12 +193,15 @@ async function ensureCustomer(phone: string, name?: string): Promise<string> {
     }
   }
 
-  throw new Error(`Failed to create customer for phone ${phone}: ${createResult.body}`);
+  throw new Error(
+    `Failed to create customer for phone ${phone}: status ${createResult.status}`,
+  );
 }
 
 /**
  * Find or create an active conversation for a customer.
- * Returns the conversation ID.
+ * A3: Uses partial unique index on conversations(customer_id, channel) WHERE status='active'
+ * to prevent duplicate active conversations via race conditions.
  */
 async function ensureConversation(
   customerId: string,
@@ -157,7 +224,7 @@ async function ensureConversation(
     }
   }
 
-  // Create new conversation
+  // A3: Create with conflict handling — unique index prevents duplicates
   const newConv = {
     customer_id: customerId,
     channel: "whatsapp",
@@ -168,7 +235,10 @@ async function ensureConversation(
     "POST",
     JSON.stringify(newConv),
   );
-  if (createResult.status === 201 || createResult.status === 200) {
+  if (
+    createResult.status === 201 ||
+    createResult.status === 200
+  ) {
     const rows = JSON.parse(createResult.body);
     if (rows.length > 0) {
       const id = rows[0].id;
@@ -180,11 +250,27 @@ async function ensureConversation(
     }
   }
 
-  throw new Error(`Failed to create conversation: ${createResult.body}`);
+  // 409 = conflict (another request created it) — fetch existing
+  if (createResult.status === 409) {
+    const retry = await supabaseGet(
+      `conversations?customer_id=eq.${customerId}&status=eq.active&channel=eq.whatsapp&select=id&limit=1`,
+    );
+    const rows = JSON.parse(retry.body);
+    if (rows.length > 0) {
+      const id = rows[0].id;
+      activeConversations.set(phone, id);
+      return id;
+    }
+  }
+
+  throw new Error(
+    `Failed to create conversation: status ${createResult.status}`,
+  );
 }
 
 /**
  * Log a message to the messages table.
+ * B14: Content is sanitized (HTML stripped, null bytes removed, length limited).
  */
 async function logMessage(
   conversationId: string,
@@ -194,9 +280,11 @@ async function logMessage(
   const msg = {
     conversation_id: conversationId,
     role,
-    content: content.substring(0, 10000), // Limit content length
+    content: sanitizeContent(content),
   };
-  await supabaseWrite("messages", "POST", JSON.stringify(msg));
+  await supabaseWrite("messages", "POST", JSON.stringify(msg)).catch((e) =>
+    console.error("[TAURA-TRACK] logMessage failed:", e.message),
+  );
 }
 
 /**
@@ -213,6 +301,14 @@ export async function trackInboundMessage(params: {
   // Only track DM messages, not groups
   if (params.chatType === "group") return null;
   if (!params.senderPhone) return null;
+
+  // B12: Validate phone format
+  if (!isValidPhone(params.senderPhone)) {
+    console.warn(
+      `[TAURA-TRACK] Invalid phone format: ${params.senderPhone.substring(0, 20)}`,
+    );
+    return null;
+  }
 
   try {
     const customerId = await ensureCustomer(

@@ -79,6 +79,9 @@ function safeEqual(a: string, b: string): boolean {
 // ─── Security: Auth check for write operations ───────────────────
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 
+// A12: Controllable local bypass — set false in production
+const ALLOW_LOCAL_BYPASS = (process.env.TAURA_ALLOW_LOCAL_BYPASS || "true").toLowerCase() !== "false";
+
 function isWriteAuthorized(req: IncomingMessage): boolean {
   const token = extractBearerToken(req);
   if (!token || !GATEWAY_TOKEN) return false;
@@ -86,9 +89,16 @@ function isWriteAuthorized(req: IncomingMessage): boolean {
 }
 
 function isLocalRequest(req: IncomingMessage): boolean {
+  if (!ALLOW_LOCAL_BYPASS) return false; // A12: Disabled in production
   const addr = req.socket?.remoteAddress || "";
   return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
 }
+
+// A11: Valid social media platforms whitelist
+const VALID_PLATFORMS = new Set([
+  "instagram", "facebook", "tiktok", "linkedin", "twitter", "youtube",
+  "pinterest", "threads", "x", "bluesky",
+]);
 
 // ─── Security: CORS origin validation ────────────────────────────
 function resolveAllowedOrigin(req: IncomingMessage): string {
@@ -138,6 +148,8 @@ function supabaseRequest(path: string): Promise<{ status: number; body: string }
     const transport = isHttps ? https : http;
     const timer = setTimeout(() => {
       req.destroy();
+      // B6: Log timeout with context
+      console.error(`[supabase-api] GET timeout after 15s: ${path.substring(0, 100)}`);
       reject(new Error("Supabase request timeout"));
     }, 15_000);
     const req = transport.request(options, (response) => {
@@ -147,16 +159,45 @@ function supabaseRequest(path: string): Promise<{ status: number; body: string }
       });
       response.on("end", () => {
         clearTimeout(timer);
+        // B6: Log non-2xx responses
+        if (response.statusCode && response.statusCode >= 400) {
+          console.warn(`[supabase-api] GET ${path.substring(0, 80)} -> ${response.statusCode}`);
+        }
         resolve({ status: response.statusCode ?? 500, body: data });
       });
     });
     req.on("error", (err) => {
       clearTimeout(timer);
+      // B6: Log request errors
+      console.error(`[supabase-api] GET error on ${path.substring(0, 80)}: ${err.message}`);
       reject(err);
     });
     req.end();
   });
 }
+
+// B7: Rate limiter for GET endpoints (sensitive data)
+const readRateLimiter = new Map<string, { count: number; resetAt: number }>();
+const READ_RATE_LIMIT_MAX = 60; // 60 reads/min per IP
+
+function isReadRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = readRateLimiter.get(ip);
+  if (!entry || now > entry.resetAt) {
+    readRateLimiter.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > READ_RATE_LIMIT_MAX;
+}
+
+// B7: Cleanup read rate limiter
+setInterval(() => {
+  const now = Date.now();
+  readRateLimiter.forEach((entry, ip) => {
+    if (now > entry.resetAt) readRateLimiter.delete(ip);
+  });
+}, 120_000).unref();
 
 function supabaseWrite(
   path: string,
@@ -185,6 +226,7 @@ function supabaseWrite(
     const transport = isHttps ? https : http;
     const timer = setTimeout(() => {
       req.destroy();
+      console.error(`[supabase-api] ${method} timeout after 15s: ${path.substring(0, 100)}`);
       reject(new Error("Supabase request timeout"));
     }, 15_000);
     const req = transport.request(options, (response) => {
@@ -194,11 +236,15 @@ function supabaseWrite(
       });
       response.on("end", () => {
         clearTimeout(timer);
+        if (response.statusCode && response.statusCode >= 400) {
+          console.warn(`[supabase-api] ${method} ${path.substring(0, 80)} -> ${response.statusCode}: ${data.substring(0, 200)}`);
+        }
         resolve({ status: response.statusCode ?? 500, body: data });
       });
     });
     req.on("error", (err) => {
       clearTimeout(timer);
+      console.error(`[supabase-api] ${method} error on ${path.substring(0, 80)}: ${err.message}`);
       reject(err);
     });
     req.write(body);
@@ -652,7 +698,9 @@ export async function handleSupabaseApiRequest(
           sendApiJson(res, 500, JSON.stringify({ ok: false, error: fsErr.message }), origin);
         }
       } catch (e: any) {
-        sendApiJson(res, 500, JSON.stringify({ ok: false, error: e.message }), origin);
+        // B11: Sanitize error — log internally, return generic message to client
+        console.error(`[supabase-api] articles/sync error:`, e);
+        sendApiJson(res, 500, JSON.stringify({ ok: false, error: "Internal server error during sync" }), origin);
       }
       return true;
     }
@@ -834,8 +882,14 @@ export async function handleSupabaseApiRequest(
       if (!postArr || postArr.length === 0) { sendApiError(res, 404, "Post not found", origin); return true; }
       const post = postArr[0];
 
+      // A11: Validate platform against whitelist before interpolation
+      if (!post.platform || !VALID_PLATFORMS.has(post.platform.toLowerCase())) {
+        sendApiError(res, 400, `Invalid platform: ${String(post.platform).substring(0, 30)}`, origin);
+        return true;
+      }
+
       // 2) Fetch the social account for this platform
-      const acctRes = await supabaseRequest(`social_accounts?platform=eq.${post.platform}&status=eq.connected&select=*&limit=1`);
+      const acctRes = await supabaseRequest(`social_accounts?platform=eq.${encodeURIComponent(post.platform)}&status=eq.connected&select=*&limit=1`);
       let acctArr: any[];
       try { acctArr = JSON.parse(acctRes.body); } catch { acctArr = []; }
       const account = acctArr?.[0] || null;

@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
-
-/* ── API Config (backend proxy) ───────────────────────────── */
-const API_BASE = "/api";
+import { apiFetch, API_BASE, unwrapResult } from "../utils/api.ts";
+import { triggerUpdate, type TauraViewState } from "../utils/state.ts";
+import { showFeedback, isFeedbackVisible } from "../utils/feedback.ts";
 
 /* ── Types ───────────────────────────────────────────────── */
 interface SocialAccount {
@@ -39,13 +39,6 @@ interface ScheduledPost {
   created_at: string;
 }
 
-interface SocialState {
-  state: {
-    requestUpdate?: () => void;
-  };
-  requestUpdate?: () => void;
-}
-
 /* ── State ───────────────────────────────────────────────── */
 let accounts: SocialAccount[] = [];
 let campaigns: Campaign[] = [];
@@ -58,8 +51,6 @@ let showCampaignForm = false;
 let showPostForm = false;
 let editingCampaign: Campaign | null = null;
 let editingPost: ScheduledPost | null = null;
-let showSavedBadge = false;
-let savedTimer: number | null = null;
 let refreshInterval: number | null = null;
 let publishingPostId: string | null = null;
 let showConnectForm = false;
@@ -99,34 +90,8 @@ const PLATFORMS = [
   { id: "threads", name: "Threads", icon: "🧵" },
 ];
 
-/* ── Trigger Update ──────────────────────────────────────── */
-function triggerUpdate(s: SocialState) {
-  if (typeof s.requestUpdate === "function") {
-    s.requestUpdate();
-  } else if (s.state && typeof s.state.requestUpdate === "function") {
-    s.state.requestUpdate();
-  }
-}
-
-/* ── Gateway API ─────────────────────────────────────────── */
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
 /* ── Load & Refresh ──────────────────────────────────────── */
-async function loadSocial(state: SocialState, force = false) {
+async function loadSocial(state: TauraViewState, force = false) {
   if (loaded && !force) return;
   loading = true;
   error = null;
@@ -141,8 +106,8 @@ async function loadSocial(state: SocialState, force = false) {
     campaigns = camps.status === "fulfilled" && camps.value ? camps.value : [];
     posts = schPosts.status === "fulfilled" && schPosts.value ? schPosts.value : [];
     loaded = true;
-  } catch (e: any) {
-    error = e.message || "Erro ao carregar dados sociais";
+  } catch (e: unknown) {
+    error = e instanceof Error ? e.message : "Erro ao carregar dados sociais";
     console.error("[social] load error:", e);
   } finally {
     loading = false;
@@ -150,7 +115,7 @@ async function loadSocial(state: SocialState, force = false) {
   }
 }
 
-function startAutoRefresh(state: SocialState) {
+function startAutoRefresh(state: TauraViewState) {
   if (refreshInterval) return;
   refreshInterval = window.setInterval(() => {
     loadSocial(state, true);
@@ -179,17 +144,8 @@ function platformIcon(platform: string): string {
   return PLATFORMS.find((p) => p.id === platform)?.icon || "🌐";
 }
 
-function showFeedback(st: SocialState) {
-  showSavedBadge = true;
-  if (savedTimer) clearTimeout(savedTimer);
-  savedTimer = window.setTimeout(() => {
-    showSavedBadge = false;
-    triggerUpdate(st);
-  }, 2500);
-}
-
 /* ── Render ───────────────────────────────────────────────── */
-export function renderSocial(state: SocialState) {
+export function renderSocial(state: TauraViewState) {
   void loadSocial(state);
   startAutoRefresh(state);
 
@@ -292,7 +248,7 @@ export function renderSocial(state: SocialState) {
           </div>
           <div class="tv-config-field">
             <label>Status</label>
-            <select .value=${campaignForm.status} @change=${(e: Event) => { campaignForm.status = (e.target as HTMLSelectElement).value as any; }}>
+            <select .value=${campaignForm.status} @change=${(e: Event) => { campaignForm.status = (e.target as HTMLSelectElement).value as Campaign["status"]; }}>
               <option value="draft">Rascunho</option>
               <option value="active">Ativa</option>
               <option value="paused">Pausada</option>
@@ -332,7 +288,7 @@ export function renderSocial(state: SocialState) {
         <div class="tv-config-actions">
           <button class="tv-btn-gold" @click=${async () => {
             if (!campaignForm.title.trim()) return;
-            const payload: any = {
+            const payload: Record<string, unknown> = {
               title: campaignForm.title.trim(),
               description: campaignForm.description || null,
               status: campaignForm.status,
@@ -347,7 +303,7 @@ export function renderSocial(state: SocialState) {
                   body: JSON.stringify(payload),
                 });
                 // M14: Standardize response unwrap (array vs single object)
-                const item = Array.isArray(result) ? result[0] : result;
+                const item = unwrapResult(result);
                 const updated = item ?? { ...editingCampaign, ...payload };
                 const idx = campaigns.findIndex((c) => c.id === editingCampaign!.id);
                 if (idx >= 0) campaigns[idx] = updated;
@@ -356,14 +312,14 @@ export function renderSocial(state: SocialState) {
                   method: "POST",
                   body: JSON.stringify(payload),
                 });
-                const item = Array.isArray(result) ? result[0] : result;
+                const item = unwrapResult(result);
                 if (item) campaigns.unshift(item);
               }
               showCampaignForm = false;
               editingCampaign = null;
               showFeedback(state);
-            } catch (e: any) {
-              error = e.message;
+            } catch (e: unknown) {
+              error = e instanceof Error ? e.message : String(e);
             }
             triggerUpdate(state);
           }}>${editingCampaign ? "Atualizar" : "Criar"}</button>
@@ -415,7 +371,7 @@ export function renderSocial(state: SocialState) {
                     await apiFetch(`/social/campaigns/${c.id}`, { method: "DELETE" });
                     campaigns = campaigns.filter((x) => x.id !== c.id);
                     showFeedback(state);
-                  } catch (e: any) { error = e.message; }
+                  } catch (e: unknown) { error = e instanceof Error ? e.message : String(e); }
                   triggerUpdate(state);
                 }}>🗑️</button>
               </div>
@@ -463,7 +419,7 @@ export function renderSocial(state: SocialState) {
             </div>
             <div class="tv-config-field">
               <label>Status</label>
-              <select .value=${postForm.status} @change=${(e: Event) => { postForm.status = (e.target as HTMLSelectElement).value as any; }}>
+              <select .value=${postForm.status} @change=${(e: Event) => { postForm.status = (e.target as HTMLSelectElement).value as ScheduledPost["status"]; }}>
                 <option value="draft">Rascunho</option>
                 <option value="scheduled">Agendado</option>
               </select>
@@ -480,7 +436,7 @@ export function renderSocial(state: SocialState) {
           <div class="tv-config-actions">
             <button class="tv-btn-gold" @click=${async () => {
               if (!postForm.content.trim()) return;
-              const payload: any = {
+              const payload: Record<string, unknown> = {
                 platform: postForm.platform,
                 campaign_id: postForm.campaign_id || null,
                 content: postForm.content.trim(),
@@ -495,7 +451,7 @@ export function renderSocial(state: SocialState) {
                     body: JSON.stringify(payload),
                   });
                   // M14: Standardize response unwrap
-                  const item = Array.isArray(result) ? result[0] : result;
+                  const item = unwrapResult(result);
                   const updated = item ?? { ...editingPost, ...payload };
                   const idx = posts.findIndex((p) => p.id === editingPost!.id);
                   if (idx >= 0) posts[idx] = updated;
@@ -504,13 +460,13 @@ export function renderSocial(state: SocialState) {
                     method: "POST",
                     body: JSON.stringify(payload),
                   });
-                  const item = Array.isArray(result) ? result[0] : result;
+                  const item = unwrapResult(result);
                   if (item) posts.unshift(item);
                 }
                 showPostForm = false;
                 editingPost = null;
                 showFeedback(state);
-              } catch (e: any) { error = e.message; }
+              } catch (e: unknown) { error = e instanceof Error ? e.message : String(e); }
               triggerUpdate(state);
             }}>${editingPost ? "Atualizar" : "Agendar"}</button>
             <button class="tv-btn-outline" @click=${() => { showPostForm = false; editingPost = null; triggerUpdate(state); }}>Cancelar</button>
@@ -550,7 +506,7 @@ export function renderSocial(state: SocialState) {
                           } else {
                             error = result?.error || "Falha ao publicar";
                           }
-                        } catch (e: any) { error = e.message; }
+                        } catch (e: unknown) { error = e instanceof Error ? e.message : String(e); }
                         publishingPostId = null;
                         triggerUpdate(state);
                       }}>${publishingPostId === p.id ? "⏳" : "🚀"}</button>
@@ -563,7 +519,7 @@ export function renderSocial(state: SocialState) {
                         content: p.content,
                         media_url: p.media_url || "",
                         scheduled_for: p.scheduled_for?.replace("Z", "").split(".")[0] || "",
-                        status: p.status as any,
+                        status: p.status as ScheduledPost["status"],
                       };
                       showPostForm = true;
                       triggerUpdate(state);
@@ -573,7 +529,7 @@ export function renderSocial(state: SocialState) {
                         await apiFetch(`/social/posts/${p.id}`, { method: "DELETE" });
                         posts = posts.filter((x) => x.id !== p.id);
                         showFeedback(state);
-                      } catch (e: any) { error = e.message; }
+                      } catch (e: unknown) { error = e instanceof Error ? e.message : String(e); }
                       triggerUpdate(state);
                     }}>🗑️</button>
                   </td>
@@ -615,7 +571,7 @@ export function renderSocial(state: SocialState) {
                     await apiFetch(`/social/accounts/${acct.id}`, { method: "DELETE" });
                     accounts = accounts.filter((a) => a.id !== acct.id);
                     showFeedback(state);
-                  } catch (e: any) { error = e.message; }
+                  } catch (e: unknown) { error = e instanceof Error ? e.message : String(e); }
                   triggerUpdate(state);
                 }}>Desconectar</button>
               ` : html`
@@ -712,7 +668,7 @@ export function renderSocial(state: SocialState) {
                     body: JSON.stringify(payload),
                   });
                   // M14: Standardize response unwrap
-                  const item = Array.isArray(result) ? result[0] : result;
+                  const item = unwrapResult(result);
                   if (item) {
                     accounts.push(item);
                   } else {
@@ -730,8 +686,8 @@ export function renderSocial(state: SocialState) {
                   showConnectForm = false;
                   connectPlatform = null;
                   showFeedback(state);
-                } catch (e: any) {
-                  error = e.message;
+                } catch (e: unknown) {
+                  error = e instanceof Error ? e.message : String(e);
                 }
                 triggerUpdate(state);
               }}>Conectar</button>
@@ -797,7 +753,7 @@ export function renderSocial(state: SocialState) {
       <div class="tv-panel-header">
         <div></div>
         <div class="tv-header-actions">
-          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Salvo</span>` : nothing}
+          ${isFeedbackVisible() ? html`<span class="tv-saved-badge">✓ Salvo</span>` : nothing}
           ${loading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">⟳ Carregando...</span>` : nothing}
           ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ Erro</span>` : nothing}
           <button class="tv-btn-sm" @click=${() => { loaded = false; loadSocial(state, true); }}>🔄 Atualizar</button>

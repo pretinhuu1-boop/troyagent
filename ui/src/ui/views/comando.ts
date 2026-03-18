@@ -1,4 +1,6 @@
 import { html, nothing } from "lit";
+import { apiFetch, API_BASE } from "../utils/api.ts";
+import { triggerUpdate, type TauraViewState } from "../utils/state.ts";
 
 /* ── Command Center TAURA ────────────────────────────────────
  * Central operations view for the multi-agent TAURA system.
@@ -14,9 +16,6 @@ import { html, nothing } from "lit";
  *   - Cron: RPC cron-list
  *   - Approvals: exec-approval-requested events
  * ──────────────────────────────────────────────────────────── */
-
-/* ── API Config ─────────────────────────────────────────── */
-const API_BASE = "/api";
 
 /* ── Storage Keys ────────────────────────────────────────── */
 const CMD_METRICS_KEY = "troy_cmd_metrics";
@@ -131,23 +130,6 @@ const STAGE_COLORS: Record<PipelineStage, string> = {
   customer: "#34D399",
   lost: "#666",
 };
-
-/* ── Gateway API ─────────────────────────────────────────── */
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
 
 /* ── Live Data State (M1-M5) ─────────────────────────────── */
 let liveCustomers: CustomerCard[] = [];

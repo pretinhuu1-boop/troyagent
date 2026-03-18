@@ -1,7 +1,8 @@
 import { html, nothing } from "lit";
-
-/* ── API Config (backend proxy) ───────────────────────────── */
-const API_BASE = "/api";
+import { apiFetch, API_BASE } from "../utils/api.ts";
+import { triggerUpdate, type TauraViewState } from "../utils/state.ts";
+import { showFeedback, isFeedbackVisible } from "../utils/feedback.ts";
+import { statusColor, statusLabel, priorityColor, type MissionStatus, type Priority } from "../utils/status.ts";
 
 /* ── Types ───────────────────────────────────────────────── */
 interface Mission {
@@ -38,21 +39,6 @@ interface MissionTask {
   created_at: string;
 }
 
-interface MissionBoardState {
-  state: {
-    requestUpdate?: () => void;
-  };
-  requestUpdate?: () => void;
-}
-
-function triggerUpdate(s: MissionBoardState) {
-  if (typeof s.requestUpdate === "function") {
-    s.requestUpdate();
-  } else if (s.state && typeof s.state.requestUpdate === "function") {
-    s.state.requestUpdate();
-  }
-}
-
 /* ── State ───────────────────────────────────────────────── */
 let missions: Mission[] = [];
 let loading = false;
@@ -66,8 +52,6 @@ let missionComments: MissionComment[] = [];
 let missionTasks: MissionTask[] = [];
 let showCommentForm = false;
 let showTaskForm = false;
-let showSavedBadge = false;
-let savedTimer: number | null = null;
 let statusFilter: "all" | Mission["status"] = "all";
 
 let formFields = {
@@ -94,25 +78,8 @@ let taskFormFields = {
   status: "pending" as MissionTask["status"],
 };
 
-/* ── Gateway API ─────────────────────────────────────────── */
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
 /* ── Data Loading ────────────────────────────────────────── */
-async function loadMissions(state: MissionBoardState, force = false) {
+async function loadMissions(state: TauraViewState, force = false) {
   if (loaded && !force) return;
   loading = true;
   error = null;
@@ -120,8 +87,8 @@ async function loadMissions(state: MissionBoardState, force = false) {
   try {
     missions = await apiFetch("/missions");
     loaded = true;
-  } catch (e: any) {
-    error = e.message || "Erro ao carregar missoes";
+  } catch (e: unknown) {
+    error = (e instanceof Error ? e.message : String(e)) || "Erro ao carregar missoes";
     console.error("[mission-board] load error:", e);
   } finally {
     loading = false;
@@ -129,7 +96,7 @@ async function loadMissions(state: MissionBoardState, force = false) {
   }
 }
 
-async function loadMissionDetails(state: MissionBoardState, missionId: string) {
+async function loadMissionDetails(state: TauraViewState, missionId: string) {
   try {
     const [comments, tasks] = await Promise.all([
       apiFetch(`/missions/${missionId}/comments`),
@@ -137,7 +104,7 @@ async function loadMissionDetails(state: MissionBoardState, missionId: string) {
     ]);
     missionComments = comments || [];
     missionTasks = tasks || [];
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("[mission-board] detail load error:", e);
     missionComments = [];
     missionTasks = [];
@@ -146,30 +113,6 @@ async function loadMissionDetails(state: MissionBoardState, missionId: string) {
 }
 
 /* ── Helpers ─────────────────────────────────────────────── */
-function statusColor(status: Mission["status"]): string {
-  switch (status) {
-    case "draft": return "#95a5a6";
-    case "discussing": return "#3498db";
-    case "approved": return "#2ecc71";
-    case "executing": return "#f39c12";
-    case "completed": return "#27ae60";
-    case "cancelled": return "#e74c3c";
-    default: return "#95a5a6";
-  }
-}
-
-function statusLabel(status: Mission["status"]): string {
-  switch (status) {
-    case "draft": return "Rascunho";
-    case "discussing": return "Em Discussao";
-    case "approved": return "Aprovada";
-    case "executing": return "Executando";
-    case "completed": return "Concluida";
-    case "cancelled": return "Cancelada";
-    default: return status;
-  }
-}
-
 function priorityIcon(priority: Mission["priority"]): string {
   switch (priority) {
     case "low": return "🟢";
@@ -205,19 +148,10 @@ function filteredMissions(): Mission[] {
   return missions.filter((m) => m.status === statusFilter);
 }
 
-function showFeedback(st: MissionBoardState, _msg: string) {
-  showSavedBadge = true;
-  if (savedTimer) clearTimeout(savedTimer);
-  savedTimer = window.setTimeout(() => {
-    showSavedBadge = false;
-    triggerUpdate(st);
-  }, 2500);
-}
-
 const ALL_STATUSES: Mission["status"][] = ["draft", "discussing", "approved", "executing", "completed", "cancelled"];
 
 /* ── Render ───────────────────────────────────────────────── */
-export function renderMissionBoard(state: MissionBoardState) {
+export function renderMissionBoard(state: TauraViewState) {
   void loadMissions(state);
 
   const filtered = filteredMissions();
@@ -263,14 +197,14 @@ export function renderMissionBoard(state: MissionBoardState) {
   };
 
   const onField = (field: keyof typeof formFields) => (e: Event) => {
-    (formFields as any)[field] = (e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
+    (formFields as Record<string, unknown>)[field] = (e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
   };
 
   const handleSave = async () => {
     const title = formFields.title.trim();
     if (!title) return;
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       title,
       description: formFields.description || null,
       priority: formFields.priority,
@@ -298,9 +232,9 @@ export function renderMissionBoard(state: MissionBoardState) {
       }
       showForm = false;
       editing = null;
-      showFeedback(state, "Missao salva");
-    } catch (e: any) {
-      error = e.message;
+      showFeedback(state);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -321,9 +255,9 @@ export function renderMissionBoard(state: MissionBoardState) {
         missionTasks = [];
       }
       deleteTarget = null;
-      showFeedback(state, "Missao removida");
-    } catch (e: any) {
-      error = e.message;
+      showFeedback(state);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -352,9 +286,9 @@ export function renderMissionBoard(state: MissionBoardState) {
         body: JSON.stringify({ status: newStatus }),
       });
       m.status = newStatus;
-      showFeedback(state, "Status atualizado");
-    } catch (e: any) {
-      error = e.message;
+      showFeedback(state);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -369,11 +303,11 @@ export function renderMissionBoard(state: MissionBoardState) {
     try {
       await apiFetch(`/missions/${m.id}/broadcast`, { method: "POST" });
       m.status = "discussing";
-      showFeedback(state, "Missao enviada aos agentes");
+      showFeedback(state);
       // Reload details to pick up any new comments
       void loadMissionDetails(state, m.id);
-    } catch (e: any) {
-      error = e.message;
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -386,11 +320,11 @@ export function renderMissionBoard(state: MissionBoardState) {
         body: JSON.stringify({ tasks: [] }),
       });
       m.status = "executing";
-      showFeedback(state, "Missao em execucao");
+      showFeedback(state);
       // Reload details to pick up new tasks
       void loadMissionDetails(state, m.id);
-    } catch (e: any) {
-      error = e.message;
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -408,7 +342,7 @@ export function renderMissionBoard(state: MissionBoardState) {
   };
 
   const onCommentField = (field: keyof typeof commentFormFields) => (e: Event) => {
-    (commentFormFields as any)[field] = (e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
+    (commentFormFields as Record<string, unknown>)[field] = (e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
   };
 
   const handleSaveComment = async () => {
@@ -421,9 +355,9 @@ export function renderMissionBoard(state: MissionBoardState) {
       if (result?.[0]) missionComments.push(result[0]);
       else if (result) missionComments.push(result);
       showCommentForm = false;
-      showFeedback(state, "Comentario adicionado");
-    } catch (e: any) {
-      error = e.message;
+      showFeedback(state);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -441,7 +375,7 @@ export function renderMissionBoard(state: MissionBoardState) {
   };
 
   const onTaskField = (field: keyof typeof taskFormFields) => (e: Event) => {
-    (taskFormFields as any)[field] = (e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
+    (taskFormFields as Record<string, unknown>)[field] = (e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
   };
 
   const handleSaveTask = async () => {
@@ -454,9 +388,9 @@ export function renderMissionBoard(state: MissionBoardState) {
       if (result?.[0]) missionTasks.push(result[0]);
       else if (result) missionTasks.push(result);
       showTaskForm = false;
-      showFeedback(state, "Tarefa adicionada");
-    } catch (e: any) {
-      error = e.message;
+      showFeedback(state);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -469,9 +403,9 @@ export function renderMissionBoard(state: MissionBoardState) {
         body: JSON.stringify({ status: newStatus }),
       });
       task.status = newStatus;
-      showFeedback(state, "Tarefa atualizada");
-    } catch (e: any) {
-      error = e.message;
+      showFeedback(state);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -518,7 +452,7 @@ export function renderMissionBoard(state: MissionBoardState) {
       <!-- Header -->
       <div class="tv-panel-header">
         <div class="tv-header-actions">
-          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
+          ${isFeedbackVisible() ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
           ${loading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">⟳ Carregando...</span>` : nothing}
           ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ Erro</span>` : nothing}
           <button class="tv-btn-sm" @click=${handleRefresh}>🔄 Atualizar</button>
@@ -766,9 +700,9 @@ export function renderMissionBoard(state: MissionBoardState) {
                     try {
                       await apiFetch(`/missions/${selectedMission.id}/comments/${c.id}`, { method: "DELETE" });
                       missionComments = missionComments.filter((x) => x.id !== c.id);
-                      showFeedback(state, "Comentario removido");
-                    } catch (e: any) {
-                      error = e.message;
+                      showFeedback(state);
+                    } catch (e: unknown) {
+                      error = e instanceof Error ? e.message : String(e);
                     }
                     triggerUpdate(state);
                   }}>🗑️</button>

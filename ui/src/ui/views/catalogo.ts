@@ -1,7 +1,8 @@
 import { html, nothing } from "lit";
-
-/* ── API Config (backend proxy) ───────────────────────────── */
-const API_BASE = "/api";
+import { apiFetch, API_BASE } from "../utils/api.ts";
+import { triggerUpdate, type TauraViewState } from "../utils/state.ts";
+import { showFeedback, isFeedbackVisible } from "../utils/feedback.ts";
+import { debounce } from "../utils/debounce.ts";
 
 /* ── Sub-tab state ────────────────────────────────────────── */
 let activeSubTab: "produtos" | "fornecedores" = "produtos";
@@ -39,21 +40,6 @@ interface Product {
   slug: string;
 }
 
-interface CatalogoState {
-  state: {
-    requestUpdate?: () => void;
-  };
-  requestUpdate?: () => void;
-}
-
-function triggerUpdate(s: CatalogoState) {
-  if (typeof s.requestUpdate === "function") {
-    s.requestUpdate();
-  } else if (s.state && typeof s.state.requestUpdate === "function") {
-    s.state.requestUpdate();
-  }
-}
-
 /* ── State ───────────────────────────────────────────────── */
 let products: Product[] = [];
 let loading = false;
@@ -62,8 +48,6 @@ let error: string | null = null;
 let editing: Product | null = null;
 let showForm = false;
 let deleteTarget: Product | null = null;
-let savedTimer: number | null = null;
-let showSavedBadge = false;
 let activeCategory = "all";
 let searchQuery = "";
 let refreshInterval: number | null = null;
@@ -107,22 +91,6 @@ let supplierFormFields = {
 };
 
 /* ── Gateway API ─────────────────────────────────────────── */
-async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API ${res.status}: ${err}`);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
 async function fetchProducts(): Promise<Product[]> {
   return apiFetch("/products");
 }
@@ -168,7 +136,7 @@ async function deleteSupplierApi(id: string): Promise<void> {
   await apiFetch(`/suppliers/${id}`, { method: "DELETE" });
 }
 
-async function loadSuppliers(state: CatalogoState, force = false) {
+async function loadSuppliers(state: TauraViewState, force = false) {
   if (suppliersLoaded && !force) return;
   suppliersLoading = true;
   suppliersError = null;
@@ -176,8 +144,8 @@ async function loadSuppliers(state: CatalogoState, force = false) {
   try {
     suppliers = await fetchSuppliers();
     suppliersLoaded = true;
-  } catch (e: any) {
-    suppliersError = e.message || "Erro ao carregar fornecedores";
+  } catch (e: unknown) {
+    suppliersError = (e instanceof Error ? e.message : String(e)) || "Erro ao carregar fornecedores";
     console.error("[catalogo] suppliers load error:", e);
   } finally {
     suppliersLoading = false;
@@ -215,7 +183,7 @@ function countryFlag(country: string): string {
 }
 
 /* ── Load & Refresh ──────────────────────────────────────── */
-async function loadProducts(state: CatalogoState, force = false) {
+async function loadProducts(state: TauraViewState, force = false) {
   if (loaded && !force) return;
   loading = true;
   error = null;
@@ -223,8 +191,8 @@ async function loadProducts(state: CatalogoState, force = false) {
   try {
     products = await fetchProducts();
     loaded = true;
-  } catch (e: any) {
-    error = e.message || "Erro ao carregar produtos";
+  } catch (e: unknown) {
+    error = (e instanceof Error ? e.message : String(e)) || "Erro ao carregar produtos";
     console.error("[catalogo] load error:", e);
   } finally {
     loading = false;
@@ -232,7 +200,7 @@ async function loadProducts(state: CatalogoState, force = false) {
   }
 }
 
-function startAutoRefresh(state: CatalogoState) {
+function startAutoRefresh(state: TauraViewState) {
   if (refreshInterval) return;
   // Refresh every 30s
   refreshInterval = window.setInterval(() => {
@@ -240,12 +208,32 @@ function startAutoRefresh(state: CatalogoState) {
   }, 30000);
 }
 
+/** C1: Stop auto-refresh when leaving view */
+function stopAutoRefresh() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
+}
+
 /* ── Helpers ─────────────────────────────────────────────── */
 function categories(): string[] {
   return [...new Set(products.map((p) => p.category))].sort();
 }
 
+// C5: Memoization cache for filtered products
+let _filteredCache: Product[] = [];
+let _filterDeps = { searchQuery: "", activeCategory: "all", productsLen: 0 };
+
 function filteredProducts(): Product[] {
+  if (
+    _filterDeps.searchQuery === searchQuery &&
+    _filterDeps.activeCategory === activeCategory &&
+    _filterDeps.productsLen === products.length
+  ) {
+    return _filteredCache;
+  }
+
   let filtered = products;
   if (activeCategory !== "all") {
     filtered = filtered.filter((p) => p.category === activeCategory);
@@ -260,8 +248,18 @@ function filteredProducts(): Product[] {
         (p.description || "").toLowerCase().includes(q)
     );
   }
+
+  _filteredCache = filtered;
+  _filterDeps = { searchQuery, activeCategory, productsLen: products.length };
   return filtered;
 }
+
+// C9: Debounced search
+let _searchState: TauraViewState | null = null;
+const debouncedSearch = debounce((value: string) => {
+  searchQuery = value;
+  if (_searchState) triggerUpdate(_searchState);
+}, 300);
 
 const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const fmtUsd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -326,7 +324,7 @@ function categoryIcon(cat: string): string {
 }
 
 /* ── Render ───────────────────────────────────────────────── */
-export function renderCatalogo(state: CatalogoState) {
+export function renderCatalogo(state: TauraViewState) {
   // Load & auto-refresh
   void loadProducts(state);
   startAutoRefresh(state);
@@ -341,10 +339,8 @@ export function renderCatalogo(state: CatalogoState) {
     loadProducts(state, true);
   };
 
-  const handleSearch = (e: Event) => {
-    searchQuery = (e.target as HTMLInputElement).value;
-    triggerUpdate(state);
-  };
+  // C9: handleSearch replaced by module-scoped debouncedSearch
+  _searchState = state;
 
   const handleCategoryFilter = (cat: string) => () => {
     activeCategory = cat;
@@ -385,12 +381,8 @@ export function renderCatalogo(state: CatalogoState) {
   };
 
   const onField = (field: keyof typeof formFields) => (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    if (field === "visible_to_customer") {
-      (formFields as any)[field] = target.checked;
-    } else {
-      (formFields as any)[field] = target.value;
-    }
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    (formFields as Record<string, unknown>)[field] = target.type === "checkbox" ? (target as HTMLInputElement).checked : target.value;
   };
 
   const handleDelete = (p: Product) => {
@@ -405,9 +397,9 @@ export function renderCatalogo(state: CatalogoState) {
       await deleteProduct(deleteTarget.id);
       products = products.filter((x) => x.id !== deleteTarget!.id);
       deleteTarget = null;
-      showFeedback(state, "Produto removido");
-    } catch (e: any) {
-      error = e.message;
+      showFeedback(state);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -434,7 +426,7 @@ export function renderCatalogo(state: CatalogoState) {
     error = null; // M10: Clear error between operations
 
     const slug = sku.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       name, sku, slug, price_brl, cost_usd, stock_qty,
       category: formFields.category || "peptide",
       format: formFields.format || "vial",
@@ -466,21 +458,12 @@ export function renderCatalogo(state: CatalogoState) {
         description: "", stock_qty: "0", warehouse: "PY", purity: "99%+",
         visible_to_customer: true,
       };
-      showFeedback(state, "Salvo no Supabase");
-    } catch (e: any) {
-      error = e.message;
+      showFeedback(state);
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
-
-  function showFeedback(st: CatalogoState, _msg: string) {
-    showSavedBadge = true;
-    if (savedTimer) clearTimeout(savedTimer);
-    savedTimer = window.setTimeout(() => {
-      showSavedBadge = false;
-      triggerUpdate(st);
-    }, 2500);
-  }
 
   /* ── Supplier Handlers ── */
   const handleSupplierSubTab = (tab: "produtos" | "fornecedores") => () => {
@@ -525,7 +508,8 @@ export function renderCatalogo(state: CatalogoState) {
   };
 
   const onSupplierField = (field: keyof typeof supplierFormFields) => (e: Event) => {
-    (supplierFormFields as any)[field] = (e.target as HTMLInputElement).value;
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    (supplierFormFields as Record<string, unknown>)[field] = target.value;
   };
 
   const handleSupplierDelete = (s: Supplier) => {
@@ -541,8 +525,8 @@ export function renderCatalogo(state: CatalogoState) {
       suppliers = suppliers.filter((x) => x.id !== supplierDeleteTarget!.id);
       supplierDeleteTarget = null;
       showSupplierFeedback(state, "Fornecedor removido");
-    } catch (e: any) {
-      suppliersError = e.message;
+    } catch (e: unknown) {
+      suppliersError = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
@@ -563,7 +547,7 @@ export function renderCatalogo(state: CatalogoState) {
     if (!name) return;
     suppliersError = null; // M10: Clear error between operations
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       name,
       contact_name: supplierFormFields.contact_name || null,
       email: supplierFormFields.email || null,
@@ -591,13 +575,13 @@ export function renderCatalogo(state: CatalogoState) {
         country: "", website: "", notes: "",
       };
       showSupplierFeedback(state, "Fornecedor salvo");
-    } catch (e: any) {
-      suppliersError = e.message;
+    } catch (e: unknown) {
+      suppliersError = e instanceof Error ? e.message : String(e);
     }
     triggerUpdate(state);
   };
 
-  function showSupplierFeedback(st: CatalogoState, _msg: string) {
+  function showSupplierFeedback(st: TauraViewState, _msg: string) {
     supplierSavedBadge = true;
     if (supplierSavedTimer) clearTimeout(supplierSavedTimer);
     supplierSavedTimer = window.setTimeout(() => {
@@ -789,11 +773,13 @@ export function renderCatalogo(state: CatalogoState) {
             type="text"
             placeholder="Buscar por nome, SKU, marca..."
             .value=${searchQuery}
-            @input=${handleSearch}
+            @input=${(e: Event) => {
+              debouncedSearch((e.target as HTMLInputElement).value);
+            }}
           />
         </div>
         <div class="tv-header-actions">
-          ${showSavedBadge ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
+          ${isFeedbackVisible() ? html`<span class="tv-saved-badge">✓ Sincronizado</span>` : nothing}
           ${loading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">⟳ Carregando...</span>` : nothing}
           ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ Erro</span>` : nothing}
           <button class="tv-btn-sm" @click=${handleRefresh}>🔄 Atualizar</button>
@@ -833,24 +819,24 @@ export function renderCatalogo(state: CatalogoState) {
           <h3>${editing ? `Editar: ${editing.name}` : "Novo Produto"}</h3>
           <div class="tv-form-grid">
             <div class="tv-config-field">
-              <label>Nome *</label>
-              <input type="text" .value=${formFields.name} @input=${onField("name")} placeholder="Ex: Retatrutide 40mg" />
+              <label for="cat-prod-name">Nome *</label>
+              <input id="cat-prod-name" type="text" .value=${formFields.name} @input=${onField("name")} placeholder="Ex: Retatrutide 40mg" />
             </div>
             <div class="tv-config-field">
-              <label>SKU *</label>
-              <input type="text" .value=${formFields.sku} @input=${onField("sku")} placeholder="Ex: THERA-RT40-PEN" />
+              <label for="cat-prod-sku">SKU *</label>
+              <input id="cat-prod-sku" type="text" .value=${formFields.sku} @input=${onField("sku")} placeholder="Ex: THERA-RT40-PEN" />
             </div>
             <div class="tv-config-field">
-              <label>Preço Venda (R$) *</label>
-              <input type="number" .value=${formFields.price_brl} @input=${onField("price_brl")} step="0.01" min="0" />
+              <label for="cat-prod-price">Preço Venda (R$) *</label>
+              <input id="cat-prod-price" type="number" .value=${formFields.price_brl} @input=${onField("price_brl")} step="0.01" min="0" />
             </div>
             <div class="tv-config-field">
-              <label>Custo (USD)</label>
-              <input type="number" .value=${formFields.cost_usd} @input=${onField("cost_usd")} step="0.01" min="0" />
+              <label for="cat-prod-cost">Custo (USD)</label>
+              <input id="cat-prod-cost" type="number" .value=${formFields.cost_usd} @input=${onField("cost_usd")} step="0.01" min="0" />
             </div>
             <div class="tv-config-field">
-              <label>Categoria</label>
-              <select .value=${formFields.category} @change=${onField("category")}>
+              <label for="cat-prod-category">Categoria</label>
+              <select id="cat-prod-category" .value=${formFields.category} @change=${onField("category")}>
                 <option value="peptide">Peptídeos</option>
                 <option value="glp1">GLP-1</option>
                 <option value="blend">Blends</option>
@@ -858,8 +844,8 @@ export function renderCatalogo(state: CatalogoState) {
               </select>
             </div>
             <div class="tv-config-field">
-              <label>Formato</label>
-              <select .value=${formFields.format} @change=${onField("format")}>
+              <label for="cat-prod-format">Formato</label>
+              <select id="cat-prod-format" .value=${formFields.format} @change=${onField("format")}>
                 <option value="vial">Vial</option>
                 <option value="caneta">Caneta</option>
                 <option value="pen">Pen</option>
