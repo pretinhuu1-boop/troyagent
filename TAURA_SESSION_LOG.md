@@ -268,23 +268,108 @@ Plano completo em: `.claude/plans/linear-rolling-crane.md`
 
 ---
 
-## Próximos Passos (ordem recomendada)
+## Bugs Corrigidos — Teste Visual UI/UX (2026-03-18)
 
-1. 🔴 **Operador**: Executar SQL migration no Supabase
-2. 🔴 **Operador**: Configurar API Key Anthropic
-3. 🔴 **Operador**: Reiniciar gateway + testar views Conteudo e Social
-4. 🔵 **Claude**: Sprint 2 — Mission Board + War Room (paineis frontend)
-5. 🟡 **Claude**: Sprint 0b — Migrar Vendas para Supabase API
-6. 🟡 **Claude**: Sprint 0c — Unificar CRM com WhatsApp tracking
-7. 🟡 **Claude**: Sprint 0e — Sub-aba Fornecedores no Catalogo
-8. 🟡 **Claude**: Sprint 0f — Sub-aba Conversas no CRM
-9. 🟢 **Claude**: Sprint 3 — Milkdown + Event Calendar
-10. 🟣 **Claude**: Sprint 4 — Postiz + OAuth
-11. 🟤 **Claude**: Sprint 5 — Gerador AI
+| Bug | Arquivo | Fix |
+|-----|---------|-----|
+| Aba Comando sem layout (CSS faltando) | `ui/src/styles/operacao.css` | +520 linhas de estilos cmd-* (grid, cards, pipeline, métricas) |
+| `column products.active does not exist` (loop infinito de erros) | `src/gateway/supabase-api.ts` | Removido filtro `&active=eq.true` da query (coluna não existe no BD) |
+| Gerador AI e Comando ausentes do menu lateral | Build antigo | Rebuild da UI resolveu |
+
+---
+
+## FEEDBACK DO OPERADOR — Funcionalidades Reais Faltando (2026-03-18)
+
+> **Contexto**: O operador testou todas as views e identificou que a maioria é "casca vazia" —
+> a interface renderiza mas não permite controlar, criar ou automatizar nada de verdade.
+
+### 🔴 Comando — "Não mecho em nada, não comando nada"
+- Fila de decisões é estática — não consigo aprovar/rejeitar com efeito real
+- Automações listadas mas não editáveis (não dá pra ajustar horário, ativar/desativar)
+- Automações deveriam estar ligadas a tarefas cron reais do gateway
+- Precisa: editor de automações inline, ligação com RPC `cron-*`, aprovação com POST real
+
+### 🔴 Catálogo — "Não dá pra subir Excel com produtos em massa"
+- Import em massa inexistente (upload Excel/CSV → parse → bulk insert)
+- Precisa: drag-drop de arquivo, preview da planilha, mapping de colunas, bulk upsert
+
+### 🔴 CRM — "O mais inútil possível"
+- Não dá pra importar dados (Excel/CSV de clientes)
+- Não dá pra exportar dados
+- Não dá pra enviar nada (mensagem, email, WhatsApp)
+- Tudo morto — dados aparecem mas nenhuma ação funcional
+- Precisa: import/export, envio de mensagem via WhatsApp gateway, histórico de contatos
+
+### 🔴 Conteúdo — "Não consigo criar nada automatizado"
+- Não dá pra conversar com o agente para planejar conteúdo
+- Não dá pra automatizar o calendário editorial
+- Precisa: chat inline com agente de conteúdo, planejamento por prompt, auto-schedule
+
+### 🔴 Social Media — "Não dá pra conectar conta nenhuma"
+- OAuth de contas não funciona (Instagram, Facebook, TikTok, etc.)
+- Sem planejamento visível — não sei o que está planejado
+- Não sei o que o agente pensou ou decidiu
+- Não consigo mandar o agente executar coisas novas
+- Precisa: OAuth real (Postiz integration), visão de plano do agente, envio de comandos
+
+### 🔴 Gerador AI — "Nem funciona"
+- O iframe carrega mas o backend do Gerador não está rodando
+- Precisa: backend Gemini funcional, ou integrar direto no painel sem iframe
+
+### 🟡 Mission Board — "O que acontece após uma nova missão?"
+- Fluxo pós-criação incompleto — missão criada mas sem lifecycle
+- Precisa: assignment a agente, breakdown em tasks, execução automática, feedback loop
+
+---
+
+## Próximos Passos — SPRINT FUNCIONAL (ordem de impacto)
+
+### Sprint F1 — Comando Operacional Real
+1. Conectar aprovações a POST `/api/decisions/:id/approve|reject`
+2. Editor de automações cron inline (horário, ativo/inativo)
+3. Ligar automações ao RPC `cron-list` / `cron-set` do gateway
+4. Métricas ao vivo via WebSocket (não só localStorage)
+
+### Sprint F2 — Import/Export em Massa
+1. Upload Excel/CSV para Catálogo (drag-drop + preview + bulk insert)
+2. Upload Excel/CSV para CRM (import clientes)
+3. Export CSV para CRM e Catálogo
+4. Biblioteca: SheetJS (xlsx) já suporta browser-side parsing
+
+### Sprint F3 — CRM Funcional
+1. Envio de mensagem WhatsApp direto do CRM (via gateway WS)
+2. Histórico de conversas por cliente (join conversations + messages)
+3. Ações rápidas: ligar, WhatsApp, email
+4. Timeline de interações
+
+### Sprint F4 — Conteúdo + Agente AI
+1. Chat inline com agente de conteúdo (sidebar ou modal)
+2. Prompt → plano editorial (agente gera calendário)
+3. Auto-schedule: agente agenda posts baseado no plano
+4. Editor de artigos com sugestões AI
+
+### Sprint F5 — Social Media Real
+1. OAuth com Postiz (Instagram, Facebook, TikTok)
+2. Dashboard de plano do agente (o que ele decidiu, por que)
+3. Envio de comandos ao agente social
+4. Calendário de posts com status (planejado/aprovado/publicado)
+
+### Sprint F6 — Mission Board Lifecycle
+1. Nova missão → assign a agente → breakdown em tasks automático
+2. Agente executa tasks e reporta progresso
+3. Operador aprova/rejeita entregas
+4. Feedback loop: missão → tasks → execução → review → done
+
+### Sprint F7 — Gerador AI Funcional
+1. Backend Gemini integrado ao gateway (sem iframe)
+2. Geração de imagem por prompt direto no painel
+3. Galeria com histórico de gerações
 
 ---
 
 | 2026-03-18 | Performance + UX fixes conteudo.ts | ✅ C3 stopAutoRefresh, C7 memoize filteredArticles, C8 debounced search, C17 toolbar aria-label/aria-pressed |
 | 2026-03-18 | C18 Kanban keyboard accessibility | ✅ aria-label on columns, @keydown handler on cards (ArrowLeft/Right moves task between columns, Enter/Space triggers click) |
+| 2026-03-18 | Teste visual UI/UX | ✅ CSS Comando criado, fix products.active query, rebuild UI, todas 9 views testadas |
+| 2026-03-18 | Feedback operador | 📝 7 views com funcionalidade real faltando — sprints F1-F7 planejados |
 
 *Este documento é atualizado automaticamente ao final de cada task. Última sessão: 2026-03-18 BRT*

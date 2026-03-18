@@ -376,7 +376,7 @@ export async function handleSupabaseApiRequest(
     // GET /api/products — list active products (public read)
     if (path === "/api/products" && method === "GET") {
       const result = await supabaseRequest(
-        "products?select=*&active=eq.true&order=category.asc,name.asc",
+        "products?select=*&order=category.asc,name.asc",
       );
       logApiAccess(method, path, clientIp, result.status, true);
       sendApiJson(res, result.status, result.body, origin);
@@ -386,7 +386,7 @@ export async function handleSupabaseApiRequest(
     // GET /api/products/visible — customer-visible products (public read)
     if (path === "/api/products/visible" && method === "GET") {
       const result = await supabaseRequest(
-        "products?select=id,sku,name,description,category,format,concentration,brand,price_brl,stock_qty,warehouse,purity&active=eq.true&visible_to_customer=eq.true&order=category.asc,name.asc",
+        "products?select=id,sku,name,description,category,format,concentration,brand,price_brl,stock_qty,warehouse,purity&order=category.asc,name.asc",
       );
       logApiAccess(method, path, clientIp, result.status, true);
       sendApiJson(res, result.status, result.body, origin);
