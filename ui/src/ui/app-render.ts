@@ -69,7 +69,9 @@ import { renderAgents } from "./views/agents.ts";
 import { renderCatalogo } from "./views/catalogo.ts";
 import { renderChannels } from "./views/channels.ts";
 import { renderChat } from "./views/chat.ts";
+import { renderComando } from "./views/comando.ts";
 import { renderConfig } from "./views/config.ts";
+import { renderConteudo } from "./views/conteudo.ts";
 import { renderCRM } from "./views/crm.ts";
 import { renderCron } from "./views/cron.ts";
 import { renderDebug } from "./views/debug.ts";
@@ -81,7 +83,11 @@ import { renderNodes } from "./views/nodes.ts";
 import { renderOverview } from "./views/overview.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
+import { renderMissionBoard } from "./views/mission-board.ts";
+import { renderSocial } from "./views/social.ts";
+import { renderGerador } from "./views/gerador.ts";
 import { renderVendas } from "./views/vendas.ts";
+import { renderWarRoom } from "./views/war-room.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
@@ -1069,11 +1075,23 @@ export function renderApp(state: AppViewState) {
               })
             : nothing
         }
-        ${state.tab === "vendas" ? renderVendas({ state }) : nothing}
+        ${state.tab === "comando" ? renderComando({ state } as any) : nothing}
 
-        ${state.tab === "catalogo" ? renderCatalogo({ state }) : nothing}
+        ${state.tab === "vendas" ? renderVendas({ state } as any) : nothing}
 
-        ${state.tab === "crm" ? renderCRM({ state }) : nothing}
+        ${state.tab === "catalogo" ? renderCatalogo({ state } as any) : nothing}
+
+        ${state.tab === "crm" ? renderCRM({ state } as any) : nothing}
+
+        ${state.tab === "conteudo" ? renderConteudo({ state } as any) : nothing}
+
+        ${state.tab === "social" ? renderSocial({ state } as any) : nothing}
+
+        ${state.tab === "gerador" ? renderGerador({ state } as any) : nothing}
+
+        ${state.tab === "mission-board" ? renderMissionBoard({ state } as any) : nothing}
+
+        ${state.tab === "war-room" ? renderWarRoom({ state } as any) : nothing}
       </main>
 
       ${

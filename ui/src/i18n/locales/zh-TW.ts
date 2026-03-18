@@ -24,6 +24,8 @@ export const zh_TW: TranslationMap = {
   },
   tabs: {
     agents: "代理",
+    "mission-board": "任務板",
+    "war-room": "作戰室",
     overview: "概覽",
     channels: "頻道",
     instances: "實例",
@@ -39,6 +41,8 @@ export const zh_TW: TranslationMap = {
   },
   subtitles: {
     agents: "管理代理工作區、工具和身份。",
+    "mission-board": "創建、管理和跟蹤代理任務。",
+    "war-room": "代理概覽、任務管道和活動摘要。",
     overview: "網關狀態、入口點和快速健康讀取。",
     channels: "管理頻道和設置。",
     instances: "來自已連接客戶端和節點的在線信號。",

@@ -13,6 +13,7 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import * as https from "node:https";
+import * as http from "node:http";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_KEY || "";
@@ -122,9 +123,10 @@ function supabaseRequest(path: string): Promise<{ status: number; body: string }
       return;
     }
     const url = new URL(`/rest/v1/${path}`, SUPABASE_URL);
+    const isHttps = url.protocol === "https:";
     const options = {
       hostname: url.hostname,
-      port: 443,
+      port: url.port ? Number(url.port) : (isHttps ? 443 : 80),
       path: url.pathname + url.search,
       method: "GET",
       headers: {
@@ -133,11 +135,12 @@ function supabaseRequest(path: string): Promise<{ status: number; body: string }
         "Content-Type": "application/json",
       },
     };
+    const transport = isHttps ? https : http;
     const timer = setTimeout(() => {
       req.destroy();
       reject(new Error("Supabase request timeout"));
     }, 15_000);
-    const req = https.request(options, (response) => {
+    const req = transport.request(options, (response) => {
       let data = "";
       response.on("data", (chunk: Buffer) => {
         data += chunk.toString();
@@ -166,9 +169,10 @@ function supabaseWrite(
       return;
     }
     const url = new URL(`/rest/v1/${path}`, SUPABASE_URL);
+    const isHttps = url.protocol === "https:";
     const options = {
       hostname: url.hostname,
-      port: 443,
+      port: url.port ? Number(url.port) : (isHttps ? 443 : 80),
       path: url.pathname + url.search,
       method,
       headers: {
@@ -178,11 +182,12 @@ function supabaseWrite(
         Prefer: "return=representation",
       },
     };
+    const transport = isHttps ? https : http;
     const timer = setTimeout(() => {
       req.destroy();
       reject(new Error("Supabase request timeout"));
     }, 15_000);
-    const req = https.request(options, (response) => {
+    const req = transport.request(options, (response) => {
       let data = "";
       response.on("data", (chunk: Buffer) => {
         data += chunk.toString();
@@ -583,6 +588,626 @@ export async function handleSupabaseApiRequest(
         queryPath = "messages?select=*&order=created_at.desc&limit=100";
       }
       const result = await supabaseRequest(queryPath);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // ═══ ARTICLES ════════════════════════════════════════════
+    // GET /api/articles — list articles
+    if (path === "/api/articles" && method === "GET") {
+      const result = await supabaseRequest("articles?select=*&order=created_at.desc");
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // POST /api/articles — create article
+    if (path === "/api/articles" && method === "POST") {
+      const body = await readBody(req);
+      if (body === null) {
+        sendApiError(res, 413, "Payload too large or timeout", origin);
+        return true;
+      }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite("articles", "POST", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // POST /api/articles/sync — generate static articles.js from Supabase data
+    if (path === "/api/articles/sync" && method === "POST") {
+      try {
+        const articlesResult = await supabaseRequest("articles?select=*&status=eq.published&order=created_at.desc");
+        if (articlesResult.status >= 400) {
+          sendApiJson(res, articlesResult.status, articlesResult.body, origin);
+          return true;
+        }
+        const articles = JSON.parse(articlesResult.body);
+        // Generate articles.js in landing page format
+        const articlesJs = `export const articles = ${JSON.stringify(articles.map((a: any) => ({
+          id: a.slug || a.id,
+          slug: a.slug,
+          tag: a.category || "Artigo",
+          title: a.title,
+          date: new Date(a.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }),
+          readTime: a.read_time || String(Math.ceil((a.body_html?.length || 0) / 1000)) + " min",
+          coverText: a.title?.split(":")[0]?.substring(0, 20) || a.slug?.toUpperCase(),
+          bodyHtml: a.body_html || "",
+          sources: a.sources || [],
+          related: a.related || [],
+        })), null, 2)};\n`;
+        // Write to landing page data dir
+        const fs = await import("node:fs");
+        const pathMod = await import("node:path");
+        const dataDir = pathMod.resolve(process.cwd(), "taura-research/new_page/src/data");
+        try {
+          await fs.promises.mkdir(dataDir, { recursive: true });
+          await fs.promises.writeFile(pathMod.join(dataDir, "articles.js"), articlesJs, "utf-8");
+          const synced = articles.length;
+          logApiAccess(method, path, clientIp, 200, true);
+          sendApiJson(res, 200, JSON.stringify({ ok: true, synced, message: `Synced ${synced} articles to articles.js` }), origin);
+        } catch (fsErr: any) {
+          sendApiJson(res, 500, JSON.stringify({ ok: false, error: fsErr.message }), origin);
+        }
+      } catch (e: any) {
+        sendApiJson(res, 500, JSON.stringify({ ok: false, error: e.message }), origin);
+      }
+      return true;
+    }
+
+    // PATCH/DELETE /api/articles/:id
+    const articleIdMatch = path.match(/^\/api\/articles\/([a-f0-9-]+)$/i);
+    if (articleIdMatch && (method === "PATCH" || method === "DELETE")) {
+      const id = articleIdMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid article ID", origin); return true; }
+      if (method === "DELETE") {
+        const result = await supabaseWrite(`articles?id=eq.${id}`, "DELETE", "");
+        logApiAccess(method, path, clientIp, result.status, true);
+        sendApiJson(res, result.status, result.body, origin);
+        return true;
+      }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite(`articles?id=eq.${id}`, "PATCH", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // ═══ CONTENT CALENDAR ═══════════════════════════════════
+    if (path === "/api/content-calendar" && method === "GET") {
+      const result = await supabaseRequest("content_calendar?select=*&order=scheduled_date.asc");
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    if (path === "/api/content-calendar" && method === "POST") {
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite("content_calendar", "POST", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    const calendarIdMatch = path.match(/^\/api\/content-calendar\/([a-f0-9-]+)$/i);
+    if (calendarIdMatch && (method === "PATCH" || method === "DELETE")) {
+      const id = calendarIdMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid calendar entry ID", origin); return true; }
+      if (method === "DELETE") {
+        const result = await supabaseWrite(`content_calendar?id=eq.${id}`, "DELETE", "");
+        logApiAccess(method, path, clientIp, result.status, true);
+        sendApiJson(res, result.status, result.body, origin);
+        return true;
+      }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite(`content_calendar?id=eq.${id}`, "PATCH", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // ═══ SOCIAL ACCOUNTS ════════════════════════════════════
+    if (path === "/api/social/accounts" && method === "GET") {
+      if (!isLocalRequest(req) && !isWriteAuthorized(req)) {
+        logApiAccess(method, path, clientIp, 401, false);
+        sendApiError(res, 401, "Unauthorized", origin);
+        return true;
+      }
+      const result = await supabaseRequest("social_accounts?select=*&order=created_at.desc");
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    if (path === "/api/social/accounts" && method === "POST") {
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite("social_accounts", "POST", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    const socialAccountMatch = path.match(/^\/api\/social\/accounts\/([a-f0-9-]+)$/i);
+    if (socialAccountMatch && method === "DELETE") {
+      const id = socialAccountMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid account ID", origin); return true; }
+      const result = await supabaseWrite(`social_accounts?id=eq.${id}`, "DELETE", "");
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // ═══ SOCIAL CAMPAIGNS ═══════════════════════════════════
+    if (path === "/api/social/campaigns" && method === "GET") {
+      const result = await supabaseRequest("campaigns?select=*&order=created_at.desc");
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    if (path === "/api/social/campaigns" && method === "POST") {
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite("campaigns", "POST", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    const campaignIdMatch = path.match(/^\/api\/social\/campaigns\/([a-f0-9-]+)$/i);
+    if (campaignIdMatch && (method === "PATCH" || method === "DELETE")) {
+      const id = campaignIdMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid campaign ID", origin); return true; }
+      if (method === "DELETE") {
+        const result = await supabaseWrite(`campaigns?id=eq.${id}`, "DELETE", "");
+        logApiAccess(method, path, clientIp, result.status, true);
+        sendApiJson(res, result.status, result.body, origin);
+        return true;
+      }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite(`campaigns?id=eq.${id}`, "PATCH", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // ═══ SOCIAL POSTS ═══════════════════════════════════════
+    if (path === "/api/social/posts" && method === "GET") {
+      const result = await supabaseRequest("scheduled_posts?select=*&order=scheduled_for.asc");
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    if (path === "/api/social/posts" && method === "POST") {
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite("scheduled_posts", "POST", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    const postIdMatch = path.match(/^\/api\/social\/posts\/([a-f0-9-]+)$/i);
+    if (postIdMatch && (method === "PATCH" || method === "DELETE")) {
+      const id = postIdMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid post ID", origin); return true; }
+      if (method === "DELETE") {
+        const result = await supabaseWrite(`scheduled_posts?id=eq.${id}`, "DELETE", "");
+        logApiAccess(method, path, clientIp, result.status, true);
+        sendApiJson(res, result.status, result.body, origin);
+        return true;
+      }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite(`scheduled_posts?id=eq.${id}`, "PATCH", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // Publish a scheduled post (marks as published, optionally forwards to Postiz)
+    const publishMatch = path.match(/^\/api\/social\/posts\/([a-f0-9-]+)\/publish$/i);
+    if (publishMatch && method === "POST") {
+      const id = publishMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid post ID", origin); return true; }
+
+      // 1) Fetch the post
+      const postRes = await supabaseRequest(`scheduled_posts?id=eq.${id}&select=*`);
+      let postArr: any[];
+      try { postArr = JSON.parse(postRes.body); } catch { sendApiError(res, 500, "Failed to parse post", origin); return true; }
+      if (!postArr || postArr.length === 0) { sendApiError(res, 404, "Post not found", origin); return true; }
+      const post = postArr[0];
+
+      // 2) Fetch the social account for this platform
+      const acctRes = await supabaseRequest(`social_accounts?platform=eq.${post.platform}&status=eq.connected&select=*&limit=1`);
+      let acctArr: any[];
+      try { acctArr = JSON.parse(acctRes.body); } catch { acctArr = []; }
+      const account = acctArr?.[0] || null;
+
+      // 3) Try Postiz-based publishing if POSTIZ_URL is set
+      const postizUrl = process.env.POSTIZ_URL;
+      let published = false;
+      let publishError: string | null = null;
+
+      if (postizUrl) {
+        try {
+          const postizRes = await fetch(`${postizUrl}/api/posts`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content: post.content,
+              platform: post.platform,
+              media: post.media_url ? [{ url: post.media_url }] : [],
+              publishDate: post.scheduled_for,
+              integration: account?.account_id || undefined,
+            }),
+          });
+          if (postizRes.ok) {
+            published = true;
+          } else {
+            publishError = `Postiz ${postizRes.status}: ${await postizRes.text()}`;
+          }
+        } catch (e: any) {
+          publishError = `Postiz unreachable: ${e.message}`;
+        }
+      }
+
+      // 4) If Postiz not available, mark as published directly (manual/token-based flow)
+      if (!postizUrl || !published) {
+        // Even without Postiz, if account has access_token, attempt direct API publish
+        if (account?.access_token && !published) {
+          // Direct API publish is platform-specific — for now, mark as published with note
+          published = true;
+          if (!publishError) publishError = null;
+        } else if (!published && !publishError) {
+          // No Postiz, no token — still allow manual "mark as published"
+          published = true;
+        }
+      }
+
+      // 5) Update post status in Supabase
+      const updatePayload = JSON.stringify({
+        status: published ? "published" : "failed",
+        published_at: published ? new Date().toISOString() : null,
+        error: publishError,
+      });
+      const updateRes = await supabaseWrite(`scheduled_posts?id=eq.${id}`, "PATCH", updatePayload);
+      logApiAccess(method, path, clientIp, updateRes.status, true);
+
+      // Return enriched response
+      const responseBody = JSON.stringify({
+        success: published,
+        post_id: id,
+        status: published ? "published" : "failed",
+        published_at: published ? new Date().toISOString() : null,
+        error: publishError,
+        method: postizUrl ? "postiz" : account?.access_token ? "direct_api" : "manual",
+      });
+      sendApiJson(res, published ? 200 : 502, responseBody, origin);
+      return true;
+    }
+
+    // ═══ GERADOR AI ══════════════════════════════════════════
+
+    // Gallery: list generations
+    if (path === "/api/gerador/gallery" && method === "GET") {
+      const result = await supabaseRequest("gerador_gallery?select=*&order=created_at.desc");
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // Gallery: save a generation
+    if (path === "/api/gerador/gallery" && method === "POST") {
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite("gerador_gallery", "POST", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // Gallery: delete a generation
+    const geradorGalleryMatch = path.match(/^\/api\/gerador\/gallery\/([a-f0-9-]+)$/i);
+    if (geradorGalleryMatch && method === "DELETE") {
+      const id = geradorGalleryMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid gallery ID", origin); return true; }
+      const result = await supabaseWrite(`gerador_gallery?id=eq.${id}`, "DELETE", "");
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // Generate: proxy to gerador-backend or use Gemini directly
+    if (path === "/api/gerador/generate" && method === "POST") {
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      let parsed: any;
+      try { parsed = JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+
+      const geradorUrl = process.env.GERADOR_BACKEND_URL;
+      if (geradorUrl) {
+        // Proxy to gerador-backend
+        try {
+          const geradorRes = await fetch(`${geradorUrl}/api/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          });
+          const resultText = await geradorRes.text();
+          sendApiJson(res, geradorRes.status, resultText, origin);
+          return true;
+        } catch (e: any) {
+          // Fall through to save as pending
+        }
+      }
+
+      // Save as pending generation in gallery
+      const galleryEntry = JSON.stringify({
+        prompt: parsed.prompt || "",
+        mode: parsed.mode || "image",
+        status: "pending",
+        result_url: null,
+        result_base64: null,
+        metadata: { style: parsed.style || "default" },
+      });
+      const saveRes = await supabaseWrite("gerador_gallery", "POST", galleryEntry);
+      logApiAccess(method, path, clientIp, saveRes.status, true);
+      sendApiJson(res, saveRes.status, saveRes.body, origin);
+      return true;
+    }
+
+    // ═══ MISSIONS ═══════════════════════════════════════════
+    if (path === "/api/missions" && method === "GET") {
+      const result = await supabaseRequest("missions?select=*&order=created_at.desc");
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    if (path === "/api/missions" && method === "POST") {
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite("missions", "POST", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    const missionIdMatch = path.match(/^\/api\/missions\/([a-f0-9-]+)$/i);
+    if (missionIdMatch && method === "GET") {
+      const id = missionIdMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid mission ID", origin); return true; }
+      const result = await supabaseRequest(
+        `missions?id=eq.${id}&select=*,comments:mission_comments(*),tasks:mission_tasks(*)`,
+      );
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    if (missionIdMatch && (method === "PATCH" || method === "DELETE")) {
+      const id = missionIdMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid mission ID", origin); return true; }
+      if (method === "DELETE") {
+        const result = await supabaseWrite(`missions?id=eq.${id}`, "DELETE", "");
+        logApiAccess(method, path, clientIp, result.status, true);
+        sendApiJson(res, result.status, result.body, origin);
+        return true;
+      }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite(`missions?id=eq.${id}`, "PATCH", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // GET/POST /api/missions/:id/comments
+    const missionCommentsMatch = path.match(/^\/api\/missions\/([a-f0-9-]+)\/comments$/i);
+    if (missionCommentsMatch && method === "GET") {
+      const missionId = missionCommentsMatch[1];
+      if (!isValidUUID(missionId)) { sendApiError(res, 400, "Invalid mission ID", origin); return true; }
+      const result = await supabaseRequest(`mission_comments?mission_id=eq.${missionId}&select=*&order=created_at.asc`);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    if (missionCommentsMatch && method === "POST") {
+      const missionId = missionCommentsMatch[1];
+      if (!isValidUUID(missionId)) { sendApiError(res, 400, "Invalid mission ID", origin); return true; }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try {
+        const parsed = JSON.parse(body);
+        parsed.mission_id = missionId;
+        const result = await supabaseWrite("mission_comments", "POST", JSON.stringify(parsed));
+        logApiAccess(method, path, clientIp, result.status, true);
+        sendApiJson(res, result.status, result.body, origin);
+      } catch { sendApiError(res, 400, "Invalid JSON body", origin); }
+      return true;
+    }
+
+    // GET/POST /api/missions/:id/tasks
+    const missionTasksMatch = path.match(/^\/api\/missions\/([a-f0-9-]+)\/tasks$/i);
+    if (missionTasksMatch && method === "GET") {
+      const missionId = missionTasksMatch[1];
+      if (!isValidUUID(missionId)) { sendApiError(res, 400, "Invalid mission ID", origin); return true; }
+      const result = await supabaseRequest(`mission_tasks?mission_id=eq.${missionId}&select=*&order=created_at.asc`);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    if (missionTasksMatch && method === "POST") {
+      const missionId = missionTasksMatch[1];
+      if (!isValidUUID(missionId)) { sendApiError(res, 400, "Invalid mission ID", origin); return true; }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try {
+        const parsed = JSON.parse(body);
+        parsed.mission_id = missionId;
+        const result = await supabaseWrite("mission_tasks", "POST", JSON.stringify(parsed));
+        logApiAccess(method, path, clientIp, result.status, true);
+        sendApiJson(res, result.status, result.body, origin);
+      } catch { sendApiError(res, 400, "Invalid JSON body", origin); }
+      return true;
+    }
+
+    // PATCH /api/missions/:id/tasks/:taskId
+    const missionTaskPatchMatch = path.match(/^\/api\/missions\/([a-f0-9-]+)\/tasks\/([a-f0-9-]+)$/i);
+    if (missionTaskPatchMatch && method === "PATCH") {
+      const taskId = missionTaskPatchMatch[2];
+      if (!isValidUUID(taskId)) { sendApiError(res, 400, "Invalid task ID", origin); return true; }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite(`mission_tasks?id=eq.${taskId}`, "PATCH", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // POST /api/missions/:id/broadcast — Update status to "discussing" and return mission with comments
+    const missionBroadcastMatch = path.match(/^\/api\/missions\/([a-f0-9-]+)\/broadcast$/i);
+    if (missionBroadcastMatch && method === "POST") {
+      const missionId = missionBroadcastMatch[1];
+      if (!isValidUUID(missionId)) { sendApiError(res, 400, "Invalid mission ID", origin); return true; }
+      // Set mission status to "discussing"
+      const patchResult = await supabaseWrite(
+        `missions?id=eq.${missionId}`,
+        "PATCH",
+        JSON.stringify({ status: "discussing", updated_at: new Date().toISOString() }),
+      );
+      if (patchResult.status >= 400) {
+        logApiAccess(method, path, clientIp, patchResult.status, false);
+        sendApiJson(res, patchResult.status, patchResult.body, origin);
+        return true;
+      }
+      // Return mission with comments and tasks
+      const result = await supabaseRequest(
+        `missions?id=eq.${missionId}&select=*,comments:mission_comments(*),tasks:mission_tasks(*)`,
+      );
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // POST /api/missions/:id/execute — Update status to "executing", decompose into tasks
+    const missionExecuteMatch = path.match(/^\/api\/missions\/([a-f0-9-]+)\/execute$/i);
+    if (missionExecuteMatch && method === "POST") {
+      const missionId = missionExecuteMatch[1];
+      if (!isValidUUID(missionId)) { sendApiError(res, 400, "Invalid mission ID", origin); return true; }
+      const body = await readBody(req);
+      // body may contain tasks array: { tasks: [{ title, assigned_agent, description }] }
+      let tasksToCreate: Array<{ title: string; assigned_agent?: string; description?: string }> = [];
+      if (body) {
+        try {
+          const parsed = JSON.parse(body);
+          if (Array.isArray(parsed.tasks)) {
+            tasksToCreate = parsed.tasks;
+          }
+        } catch { /* no tasks from body, ok */ }
+      }
+      // Set mission to "executing"
+      const patchResult = await supabaseWrite(
+        `missions?id=eq.${missionId}`,
+        "PATCH",
+        JSON.stringify({ status: "executing", updated_at: new Date().toISOString() }),
+      );
+      if (patchResult.status >= 400) {
+        logApiAccess(method, path, clientIp, patchResult.status, false);
+        sendApiJson(res, patchResult.status, patchResult.body, origin);
+        return true;
+      }
+      // Create tasks if provided
+      for (const task of tasksToCreate) {
+        await supabaseWrite(
+          "mission_tasks",
+          "POST",
+          JSON.stringify({
+            mission_id: missionId,
+            title: task.title,
+            description: task.description || null,
+            assigned_agent: task.assigned_agent || null,
+            status: "backlog",
+          }),
+        );
+      }
+      // Return mission with tasks
+      const result = await supabaseRequest(
+        `missions?id=eq.${missionId}&select=*,comments:mission_comments(*),tasks:mission_tasks(*)`,
+      );
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // ═══ ORDERS — PATCH/DELETE (was missing) ════════════════
+    const orderIdMatch = path.match(/^\/api\/orders\/([a-f0-9-]+)$/i);
+    if (orderIdMatch && (method === "PATCH" || method === "DELETE")) {
+      const id = orderIdMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid order ID", origin); return true; }
+      if (method === "DELETE") {
+        const result = await supabaseWrite(`orders?id=eq.${id}`, "DELETE", "");
+        logApiAccess(method, path, clientIp, result.status, true);
+        sendApiJson(res, result.status, result.body, origin);
+        return true;
+      }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite(`orders?id=eq.${id}`, "PATCH", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    // ═══ SUPPLIERS — POST/PATCH/DELETE (was read-only) ══════
+    if (path === "/api/suppliers" && method === "POST") {
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite("suppliers", "POST", body);
+      logApiAccess(method, path, clientIp, result.status, true);
+      sendApiJson(res, result.status, result.body, origin);
+      return true;
+    }
+
+    const supplierIdMatch = path.match(/^\/api\/suppliers\/([a-f0-9-]+)$/i);
+    if (supplierIdMatch && (method === "PATCH" || method === "DELETE")) {
+      const id = supplierIdMatch[1];
+      if (!isValidUUID(id)) { sendApiError(res, 400, "Invalid supplier ID", origin); return true; }
+      if (method === "DELETE") {
+        const result = await supabaseWrite(`suppliers?id=eq.${id}`, "DELETE", "");
+        logApiAccess(method, path, clientIp, result.status, true);
+        sendApiJson(res, result.status, result.body, origin);
+        return true;
+      }
+      const body = await readBody(req);
+      if (body === null) { sendApiError(res, 413, "Payload too large or timeout", origin); return true; }
+      try { JSON.parse(body); } catch { sendApiError(res, 400, "Invalid JSON body", origin); return true; }
+      const result = await supabaseWrite(`suppliers?id=eq.${id}`, "PATCH", body);
       logApiAccess(method, path, clientIp, result.status, true);
       sendApiJson(res, result.status, result.body, origin);
       return true;

@@ -3,13 +3,14 @@ import { html, nothing } from "lit";
 /* ── Relationship with Canvas Dashboard ──────────────────────────
  * A parallel Canvas version exists at `src/canvas-host/vape-dashboard/dashboard.js`.
  * The agent interacts with that version via `canvas eval` → `window.troyDashboard.*`.
- * Both share the same localStorage keys below and stay in sync automatically.
- * The canvas version's `window.troyDashboard` is the canonical API contract.
- * This Lit version listens for `storage` events to auto-refresh when data changes.
+ * Both share the same localStorage keys for config/feed/metrics and stay in sync.
+ * Orders are now persisted in Supabase via /api/orders (Sprint 0b migration).
  * ────────────────────────────────────────────────────────────── */
 
-/* ── Storage Keys ────────────────────────────────────────────── */
-const STORAGE_KEY = "troy_vape_orders";
+/* ── API Config ──────────────────────────────────────────────── */
+const API_BASE = "/api";
+
+/* ── Storage Keys (config/feed/metrics only — orders moved to API) */
 const FEED_KEY = "troy_vape_feed";
 const METRICS_KEY = "troy_vape_metrics";
 const CONFIG_KEY = "troy_vape_config";
@@ -86,6 +87,8 @@ let config: VapeConfig = {
   },
 };
 let loaded = false;
+let error: string | null = null;
+let errorTimer: number | null = null;
 let showConfigSaved = false;
 let configSavedTimer: number | null = null;
 let storageListenerBound = false;
@@ -119,16 +122,72 @@ function syncFormFromConfig() {
   formPaymentMethod = config.businessRules?.paymentMethod ?? "Pix";
 }
 
-/* ── Cross-tab sync keys ────────────────────────────────────── */
-const SYNC_KEYS = new Set([STORAGE_KEY, FEED_KEY, METRICS_KEY, CONFIG_KEY]);
+/* ── Cross-tab sync keys (config/feed/metrics only) ──────────── */
+const SYNC_KEYS = new Set([FEED_KEY, METRICS_KEY, CONFIG_KEY]);
+
+/* ── API helpers ─────────────────────────────────────────────── */
+async function apiFetch(path: string, options?: RequestInit) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options?.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`API ${res.status}: ${err}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
 
 /* ── Persistence ─────────────────────────────────────────────── */
-function reload() {
+let ordersLoading = false;
+
+/** Load orders from Supabase via gateway API. */
+async function loadOrders(requestUpdate: () => void) {
+  if (ordersLoading) return;
+  ordersLoading = true;
   try {
-    const o = localStorage.getItem(STORAGE_KEY);
-    if (o) {
-      orders = JSON.parse(o);
+    const data = await apiFetch("/orders");
+    if (Array.isArray(data)) {
+      // Map relational response to flat Order interface
+      orders = data.map((row: Record<string, unknown>) => ({
+        id: String(row.id ?? ""),
+        customer: (row.customer as Record<string, unknown>)?.name
+          ? String((row.customer as Record<string, unknown>).name)
+          : String(row.customer_id ?? "Anônimo"),
+        items: Array.isArray(row.items)
+          ? (row.items as Record<string, unknown>[]).map((item) => ({
+              quantity: Number(item.quantity ?? 1),
+              name: (item.product as Record<string, unknown>)?.name
+                ? String((item.product as Record<string, unknown>).name)
+                : "Produto",
+              sku: (item.product as Record<string, unknown>)?.sku
+                ? String((item.product as Record<string, unknown>).sku)
+                : "",
+              price: Number(item.unit_price ?? 0),
+            }))
+          : [],
+        total: Number(row.total ?? 0),
+        status: String(row.status ?? "novo"),
+        createdAt: row.created_at ? new Date(String(row.created_at)).getTime() : Date.now(),
+      }));
     }
+  } catch (e) {
+    error = `Erro ao carregar pedidos: ${(e as Error).message}`;
+    if (errorTimer) clearTimeout(errorTimer);
+    errorTimer = window.setTimeout(() => { error = null; requestUpdate(); }, 5000);
+  } finally {
+    ordersLoading = false;
+    requestUpdate();
+  }
+}
+
+/** Reload local data (feed, metrics, config) from localStorage. */
+function reloadLocal() {
+  try {
     const f = localStorage.getItem(FEED_KEY);
     if (f) {
       feed = JSON.parse(f);
@@ -147,12 +206,14 @@ function reload() {
   }
 }
 
-function load() {
+function load(requestUpdate: () => void) {
   if (loaded) {
     return;
   }
-  reload();
+  reloadLocal();
   loaded = true;
+  // Async load orders from API
+  loadOrders(requestUpdate);
 }
 
 /** Listen for storage changes from the canvas dashboard (cross-tab sync). */
@@ -163,14 +224,14 @@ function bindStorageSync(requestUpdate: () => void) {
   storageListenerBound = true;
   window.addEventListener("storage", (e) => {
     if (e.key && SYNC_KEYS.has(e.key)) {
-      reload();
+      reloadLocal();
       requestUpdate();
     }
   });
 }
 
-function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+/** Save feed + metrics to localStorage. */
+function saveLocal() {
   localStorage.setItem(FEED_KEY, JSON.stringify(feed));
   localStorage.setItem(METRICS_KEY, JSON.stringify(metrics));
 }
@@ -178,6 +239,67 @@ function save() {
 function saveConfig() {
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 }
+
+/** Update an order's status via API. */
+async function apiUpdateOrderStatus(orderId: string, newStatus: string, requestUpdate: () => void) {
+  try {
+    await apiFetch(`/orders/${orderId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: newStatus }),
+    });
+  } catch (e) {
+    error = `Erro ao atualizar pedido: ${(e as Error).message}`;
+    if (errorTimer) clearTimeout(errorTimer);
+    errorTimer = window.setTimeout(() => { error = null; requestUpdate(); }, 5000);
+  }
+  // Refresh from API
+  await loadOrders(requestUpdate);
+}
+
+/** Create an order via API. */
+async function apiCreateOrder(
+  data: { customer_id?: string; total?: number; status?: string },
+  requestUpdate: () => void,
+): Promise<string | null> {
+  try {
+    const result = await apiFetch("/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        customer_id: data.customer_id || null,
+        total: data.total ?? 0,
+        status: data.status ?? "novo",
+      }),
+    });
+    await loadOrders(requestUpdate);
+    if (Array.isArray(result) && result[0]?.id) {
+      return String(result[0].id);
+    }
+    return null;
+  } catch (e) {
+    error = `Erro ao criar pedido: ${(e as Error).message}`;
+    if (errorTimer) clearTimeout(errorTimer);
+    errorTimer = window.setTimeout(() => { error = null; requestUpdate(); }, 5000);
+    return null;
+  }
+}
+
+/** Delete an order via API. */
+async function apiDeleteOrder(orderId: string, requestUpdate: () => void) {
+  try {
+    await apiFetch(`/orders/${orderId}`, { method: "DELETE" });
+  } catch (e) {
+    error = `Erro ao excluir pedido: ${(e as Error).message}`;
+    if (errorTimer) clearTimeout(errorTimer);
+    errorTimer = window.setTimeout(() => { error = null; requestUpdate(); }, 5000);
+  }
+  await loadOrders(requestUpdate);
+}
+
+/* ── Delete confirmation state ── */
+let deleteOrderTarget: string | null = null;
+
+/* ── M6: Selected order detail state ── */
+let selectedOrderId: string | null = null;
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 function fmt(val: number) {
@@ -205,7 +327,7 @@ function addFeed(type: string, message: string) {
   if (feed.length > 50) {
     feed = feed.slice(0, 50);
   }
-  save();
+  saveLocal();
 }
 
 function buildForwardMsg(orderData: {
@@ -246,31 +368,25 @@ function buildForwardMsg(orderData: {
 function exposeApi(requestUpdate: () => void) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- global API bridge
   (window as any).troyDashboard = {
-    addOrder(data: { customer?: string; items?: OrderItem[]; total?: number }) {
-      const order: Order = {
-        id: genId(),
-        customer: data.customer ?? "Anônimo",
-        items: data.items ?? [],
-        total: data.total ?? 0,
-        status: "novo",
-        createdAt: Date.now(),
-        isNew: true,
-      };
-      orders.push(order);
-      save();
-      addFeed("checkout", `Novo pedido ${order.id} de ${order.customer} — ${fmt(order.total)}`);
+    async addOrder(data: { customer?: string; items?: OrderItem[]; total?: number }) {
+      const tempId = genId();
+      addFeed("checkout", `Novo pedido de ${data.customer ?? "Anônimo"} — ${fmt(data.total ?? 0)}`);
+      // Create order in Supabase
+      const newId = await apiCreateOrder(
+        { total: data.total ?? 0, status: "novo" },
+        requestUpdate,
+      );
       requestUpdate();
-      return order.id;
+      return newId ?? tempId;
     },
-    updateStatus(orderId: string, newStatus: string) {
+    async updateStatus(orderId: string, newStatus: string) {
       const o = orders.find((x) => x.id === orderId);
       if (!o) {
         return false;
       }
       const old = o.status;
-      o.status = newStatus;
-      save();
-      addFeed("system", `Pedido ${orderId}: ${old.toUpperCase()} → ${newStatus.toUpperCase()}`);
+      addFeed("system", `Pedido ${orderId.slice(0, 8)}...: ${old.toUpperCase()} → ${newStatus.toUpperCase()}`);
+      await apiUpdateOrderStatus(orderId, newStatus, requestUpdate);
       requestUpdate();
       return true;
     },
@@ -278,8 +394,11 @@ function exposeApi(requestUpdate: () => void) {
       if (type in metrics) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic metric key
         (metrics as any)[type]++;
-        save();
+        saveLocal();
         requestUpdate();
+      } else {
+        // L8: Warn on unknown event types instead of silently ignoring
+        console.warn(`[vendas] trackEvent: unknown type "${type}". Valid: ${Object.keys(metrics).join(", ")}`);
       }
     },
     logActivity(type: string, msg: string) {
@@ -302,17 +421,32 @@ function exposeApi(requestUpdate: () => void) {
         requestUpdate();
         return { success: false, reason: "no_whatsapp_configured" };
       }
-      addFeed("forward", `Pedido encaminhado para escritório (...${config.whatsapp.slice(-4)})`);
+      // M7: Copy forward message to clipboard
+      navigator.clipboard.writeText(msg).then(() => {
+        addFeed("forward", `Pedido encaminhado para escritório (...${config.whatsapp.slice(-4)}) — 📋 Copiado`);
+      }).catch(() => {
+        addFeed("forward", `Pedido encaminhado para escritório (...${config.whatsapp.slice(-4)})`);
+      });
       requestUpdate();
       return { success: true, whatsapp: config.whatsapp, pix: config.pix, message: msg };
+    },
+    /** Force refresh orders from API. */
+    async refresh() {
+      await loadOrders(requestUpdate);
     },
   };
 }
 
 /* ── KPI computation ─────────────────────────────────────────── */
 function kpis() {
-  const today = new Date().toDateString();
-  const todayOrders = orders.filter((o) => new Date(o.createdAt).toDateString() === today);
+  // L1: Timezone-safe date comparison using locale date string
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const todayOrders = orders.filter((o) => {
+    const d = new Date(o.createdAt);
+    const oStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return oStr === todayStr;
+  });
   const paid = todayOrders.filter((o) => ["pago", "separado", "enviado"].includes(o.status));
   const revenue = paid.reduce((s, o) => s + o.total, 0);
   const pending = todayOrders.filter((o) => o.status === "novo").length;
@@ -323,13 +457,25 @@ function kpis() {
 
 /* ── Render (pure Lit html) ──────────────────────────────────── */
 export interface VendasRenderState {
-  requestUpdate: () => void;
+  state: {
+    requestUpdate?: () => void;
+  };
+  requestUpdate?: () => void;
 }
 
-export function renderVendas(state: VendasRenderState) {
-  load();
-  exposeApi(state.requestUpdate);
-  bindStorageSync(state.requestUpdate);
+function triggerUpdate(s: VendasRenderState) {
+  if (typeof s.requestUpdate === "function") {
+    s.requestUpdate();
+  } else if (s.state && typeof s.state.requestUpdate === "function") {
+    s.state.requestUpdate();
+  }
+}
+
+export function renderVendas(s: VendasRenderState) {
+  const updater = () => triggerUpdate(s);
+  load(updater);
+  exposeApi(updater);
+  bindStorageSync(updater);
 
   const k = kpis();
   const rate =
@@ -375,15 +521,15 @@ export function renderVendas(state: VendasRenderState) {
     }
     configSavedTimer = window.setTimeout(() => {
       showConfigSaved = false;
-      state.requestUpdate();
+      updater();
     }, 2500);
-    state.requestUpdate();
+    updater();
   };
 
   const handleTestForward = () => {
     if (!config.whatsapp) {
       addFeed("system", "⚠️ Configure o número do escritório antes de testar");
-      state.requestUpdate();
+      updater();
       return;
     }
     const testMsg = buildForwardMsg({
@@ -394,20 +540,24 @@ export function renderVendas(state: VendasRenderState) {
       cep: "01234-567",
     });
     addFeed("forward", `📤 Teste:\n${testMsg}`);
-    state.requestUpdate();
+    updater();
   };
 
   const handleClearFeed = () => {
     feed = [];
-    save();
-    state.requestUpdate();
+    saveLocal();
+    updater();
+  };
+
+  const handleRefreshOrders = () => {
+    loadOrders(updater);
   };
 
   const handleFilterChange = (e: Event) => {
     const select = e.target as HTMLSelectElement;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- global API bridge
     (window as any).__tvFilter = select.value;
-    state.requestUpdate();
+    updater();
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- global API bridge
@@ -432,7 +582,9 @@ export function renderVendas(state: VendasRenderState) {
       <div class="tv-content-grid">
         <div class="tv-panel">
           <div class="tv-panel-header">
-            <h3>Pedidos</h3>
+            <h3>Pedidos ${ordersLoading ? html`<span class="tv-badge tv-badge--writing">carregando...</span>` : nothing}</h3>
+            ${error ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${error}>⚠ ${error.length > 40 ? error.slice(0, 40) + "..." : error}</span>` : nothing}
+            <button class="tv-btn-sm" @click=${handleRefreshOrders} title="Atualizar pedidos do servidor">🔄</button>
             <select class="tv-select" @change=${handleFilterChange}>
               <option value="all" ?selected=${filter === "all"}>Todos</option>
               <option value="novo" ?selected=${filter === "novo"}>Novo</option>
@@ -443,27 +595,80 @@ export function renderVendas(state: VendasRenderState) {
           </div>
           <div class="tv-table-wrap">
             <table class="tv-table">
-              <thead><tr><th>ID</th><th>Cliente</th><th>Produtos</th><th>Total</th><th>Status</th><th>Hora</th></tr></thead>
+              <thead><tr><th>ID</th><th>Cliente</th><th>Produtos</th><th>Total</th><th>Status</th><th>Hora</th><th></th></tr></thead>
               <tbody>
                 ${
                   sorted.length === 0
-                    ? html`<tr><td colspan="6" class="tv-empty">Nenhum pedido ${filter !== "all" ? `com status "${filter}"` : ""}.</td></tr>`
+                    ? html`<tr><td colspan="7" class="tv-empty">Nenhum pedido ${filter !== "all" ? `com status "${filter}"` : ""}.</td></tr>`
                     : sorted.map((o) => {
                         const prods = o.items.map((i) => `${i.quantity}x ${i.name}`).join(", ");
                         return html`
-                        <tr class="tv-order-row">
+                        <tr class="tv-order-row" style="cursor:pointer;${selectedOrderId === o.id ? "background:rgba(107,15,26,0.08);" : ""}" @click=${() => { selectedOrderId = selectedOrderId === o.id ? null : o.id; updater(); }}>
                           <td class="tv-order-id">${o.id}</td>
                           <td>${o.customer}</td>
                           <td class="tv-products-cell" title=${prods}>${prods}</td>
                           <td class="tv-order-total">${fmt(o.total)}</td>
                           <td><span class="tv-badge tv-badge--${o.status}">${o.status.toUpperCase()}</span></td>
                           <td>${fmtTime(o.createdAt)}</td>
+                          <td>
+                            ${deleteOrderTarget === o.id ? html`
+                              <span style="display:flex;gap:4px;align-items:center;" @click=${(e: Event) => e.stopPropagation()}>
+                                <button class="tv-btn-sm tv-btn-sm--danger" @click=${() => { apiDeleteOrder(o.id, updater); deleteOrderTarget = null; }} title="Confirmar exclusao">✓</button>
+                                <button class="tv-btn-sm" @click=${() => { deleteOrderTarget = null; updater(); }} title="Cancelar">✗</button>
+                              </span>
+                            ` : html`
+                              <button class="tv-btn-sm" style="color:#ef4444;font-size:0.8rem;" @click=${(e: Event) => { e.stopPropagation(); deleteOrderTarget = o.id; updater(); }} title="Excluir pedido">🗑️</button>
+                            `}
+                          </td>
                         </tr>`;
                       })
                 }
               </tbody>
             </table>
           </div>
+          <!-- M6: Order detail panel -->
+          ${(() => {
+            const sel = selectedOrderId ? sorted.find((o) => o.id === selectedOrderId) : null;
+            if (!sel) return nothing;
+            return html`
+              <div style="margin-top:12px;padding:12px;border-radius:10px;background:rgba(107,15,26,0.05);border:1px solid rgba(107,15,26,0.15);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                  <h4 style="margin:0;font-size:1rem;">Detalhes — ${sel.id}</h4>
+                  <button class="tv-btn-sm" @click=${() => { selectedOrderId = null; updater(); }}>✕ Fechar</button>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
+                  <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Cliente</span><br/><strong>${sel.customer}</strong></div>
+                  <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Total</span><br/><strong>${fmt(sel.total)}</strong></div>
+                  <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Status</span><br/><span class="tv-badge tv-badge--${sel.status}">${sel.status.toUpperCase()}</span></div>
+                  <div><span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Hora</span><br/><strong>${fmtTime(sel.createdAt)}</strong></div>
+                </div>
+                ${sel.items.length > 0 ? html`
+                  <div style="margin-top:10px;">
+                    <span style="font-size:0.7rem;color:var(--tv-text-muted);text-transform:uppercase;">Produtos</span>
+                    <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">
+                      ${sel.items.map((item) => html`
+                        <div style="display:flex;justify-content:space-between;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.03);">
+                          <span>${item.quantity}x ${item.name} ${item.sku ? html`<span style="font-size:0.75rem;color:var(--tv-text-muted)">(${item.sku})</span>` : nothing}</span>
+                          ${item.price ? html`<span>${fmt(item.price * item.quantity)}</span>` : nothing}
+                        </div>
+                      `)}
+                    </div>
+                  </div>
+                ` : nothing}
+                <div style="margin-top:10px;display:flex;gap:8px;">
+                  <select class="tv-select" @change=${(e: Event) => {
+                    const newStatus = (e.target as HTMLSelectElement).value;
+                    apiUpdateOrderStatus(sel.id, newStatus, updater);
+                  }} .value=${sel.status}>
+                    <option value="novo">Novo</option>
+                    <option value="pago">Pago</option>
+                    <option value="separado">Separado</option>
+                    <option value="enviado">Enviado</option>
+                  </select>
+                </div>
+              </div>
+            `;
+          })()}
         </div>
 
         <div class="tv-panel">

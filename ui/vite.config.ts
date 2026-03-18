@@ -38,6 +38,13 @@ export default defineConfig(() => {
       host: true,
       port: 5173,
       strictPort: true,
+      proxy: {
+        // Proxy WebSocket connections to the local gateway
+        "/": {
+          target: "ws://127.0.0.1:19001",
+          ws: true,
+        },
+      },
     },
   };
 });

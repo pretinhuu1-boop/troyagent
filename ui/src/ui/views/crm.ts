@@ -20,6 +20,24 @@ interface Customer {
   updated_at: string;
 }
 
+interface Conversation {
+  id: string;
+  customer_id: string;
+  channel: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  customer?: Customer;
+}
+
+interface Message {
+  id: string;
+  conversation_id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  created_at: string;
+}
+
 interface CRMState {
   state: {
     requestUpdate?: () => void;
@@ -41,6 +59,20 @@ let deleteTarget: Customer | null = null;
 let refreshInterval: number | null = null;
 let showSavedBadge = false;
 let savedTimer: number | null = null;
+
+/* ── Conversations State ─────────────────────────────────── */
+let activeSubTab: "clientes" | "conversas" = "clientes";
+let conversations: Conversation[] = [];
+let conversationsLoading = false;
+let conversationsLoaded = false;
+let conversationsError: string | null = null;
+let selectedConversationId: string | null = null;
+let conversationMessages: Message[] = [];
+let messagesLoading = false;
+let conversationsRefreshInterval: number | null = null;
+let messageSearchQuery = ""; // L3: search in messages
+let messagesPageSize = 20; // L4: pagination
+let messagesShowAll = false;
 
 let formFields = {
   name: "",
@@ -108,6 +140,48 @@ function startAutoRefresh(state: CRMState) {
   }, 30000);
 }
 
+/* ── Conversations Load & Refresh ─────────────────────────── */
+async function loadConversations(state: CRMState, force = false) {
+  if (conversationsLoaded && !force) return;
+  conversationsLoading = true;
+  conversationsError = null;
+  triggerUpdate(state);
+  try {
+    conversations = await apiFetch("/conversations");
+    conversationsLoaded = true;
+  } catch (e: any) {
+    conversationsError = e.message || "Erro ao carregar conversas";
+    console.error("[crm] conversations load error:", e);
+  } finally {
+    conversationsLoading = false;
+    triggerUpdate(state);
+  }
+}
+
+async function loadMessages(state: CRMState, conversationId: string) {
+  messagesLoading = true;
+  triggerUpdate(state);
+  try {
+    conversationMessages = await apiFetch(`/messages?conversation_id=${conversationId}`);
+  } catch (e: any) {
+    console.error("[crm] messages load error:", e);
+    conversationMessages = [];
+  } finally {
+    messagesLoading = false;
+    triggerUpdate(state);
+  }
+}
+
+function startConversationsAutoRefresh(state: CRMState) {
+  if (conversationsRefreshInterval) return;
+  conversationsRefreshInterval = window.setInterval(() => {
+    loadConversations(state, true);
+    if (selectedConversationId) {
+      loadMessages(state, selectedConversationId);
+    }
+  }, 15000);
+}
+
 /* ── Helpers ─────────────────────────────────────────────── */
 function filteredCustomers(): Customer[] {
   let filtered = customers;
@@ -148,6 +222,44 @@ function timeAgo(iso: string): string {
   return `${Math.floor(d / 30)}m`;
 }
 
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function channelIcon(channel: string): string {
+  switch (channel?.toLowerCase()) {
+    case "whatsapp": return "\uD83D\uDCAC";
+    case "instagram": return "\uD83D\uDCF7";
+    case "telegram": return "\u2708\uFE0F";
+    case "web": return "\uD83C\uDF10";
+    default: return "\uD83D\uDCE8";
+  }
+}
+
+function statusLabel(status: string): string {
+  switch (status?.toLowerCase()) {
+    case "open": return "Aberta";
+    case "closed": return "Fechada";
+    case "pending": return "Pendente";
+    default: return status || "—";
+  }
+}
+
+function statusColor(status: string): string {
+  switch (status?.toLowerCase()) {
+    case "open": return "#22c55e";
+    case "closed": return "#6b7280";
+    case "pending": return "#f59e0b";
+    default: return "#94a3b8";
+  }
+}
+
 function maskPhone(phone: string): string {
   if (!phone || phone.length < 8) return phone;
   // Show country code + last 4
@@ -167,11 +279,49 @@ export function renderCRM(state: CRMState) {
   void loadCustomers(state);
   startAutoRefresh(state);
 
+  if (activeSubTab === "conversas") {
+    void loadConversations(state);
+    startConversationsAutoRefresh(state);
+  } else {
+    // M11: Clear conversations refresh interval when not on conversas tab
+    if (conversationsRefreshInterval) {
+      clearInterval(conversationsRefreshInterval);
+      conversationsRefreshInterval = null;
+    }
+  }
+
   const filtered = filteredCustomers();
   const b2cCount = customers.filter((c) => c.type === "b2c").length;
   const b2bCount = customers.filter((c) => c.type === "b2b").length;
   const citiesCount = new Set(customers.map((c) => c.city).filter(Boolean)).size;
   const selected = selectedId ? customers.find((c) => c.id === selectedId) : null;
+
+  /* ── Sub-tab handlers ── */
+  const handleSubTab = (tab: "clientes" | "conversas") => () => {
+    activeSubTab = tab;
+    triggerUpdate(state);
+  };
+
+  const handleSelectConversation = (id: string) => () => {
+    if (selectedConversationId === id) {
+      selectedConversationId = null;
+      conversationMessages = [];
+    } else {
+      selectedConversationId = id;
+      messageSearchQuery = ""; // L3: Reset search on conversation change
+      messagesShowAll = false; // L4: Reset pagination on conversation change
+      void loadMessages(state, id);
+    }
+    triggerUpdate(state);
+  };
+
+  const handleRefreshConversations = () => {
+    conversationsLoaded = false;
+    void loadConversations(state, true);
+    if (selectedConversationId) {
+      void loadMessages(state, selectedConversationId);
+    }
+  };
 
   /* ── Handlers ── */
   const handleSearch = (e: Event) => {
@@ -249,18 +399,26 @@ export function renderCRM(state: CRMState) {
 
     try {
       if (editing) {
-        payload.id = editing.id;
         payload.updated_at = new Date().toISOString();
-        // We'd need a PATCH endpoint — for now reload
-        // TODO: implement PATCH /api/customers/:id
-      }
-      // POST creates new
-      const result = await apiFetch("/customers", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      if (result?.[0]) {
-        customers.unshift(result[0]);
+        const result = await apiFetch(`/customers/${editing.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+        // Update in-place
+        const updated = result?.[0] ?? { ...editing, ...payload };
+        const idx = customers.findIndex((c) => c.id === editing!.id);
+        if (idx >= 0) {
+          customers[idx] = updated;
+        }
+      } else {
+        // POST creates new
+        const result = await apiFetch("/customers", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        if (result?.[0]) {
+          customers.unshift(result[0]);
+        }
       }
       showForm = false;
       editing = null;
@@ -307,6 +465,17 @@ export function renderCRM(state: CRMState) {
   /* ── Template ── */
   return html`
     <div class="tv-catalogo">
+      <!-- Sub-Tab Bar -->
+      <div class="tv-category-bar" style="margin-bottom: 1rem;">
+        <button class="tv-cat-btn ${activeSubTab === "clientes" ? "active" : ""}" @click=${handleSubTab("clientes")}>
+          Clientes <span class="tv-cat-count">${customers.length}</span>
+        </button>
+        <button class="tv-cat-btn ${activeSubTab === "conversas" ? "active" : ""}" @click=${handleSubTab("conversas")}>
+          Conversas <span class="tv-cat-count">${conversations.length}</span>
+        </button>
+      </div>
+
+      ${activeSubTab === "clientes" ? html`
       <!-- KPI Bar -->
       <div class="tv-kpi-grid">
         <div class="tv-kpi">
@@ -494,6 +663,157 @@ export function renderCRM(state: CRMState) {
             </div>
           ` : nothing}
         </div>
+      ` : nothing}
+      ` : nothing}
+
+      ${activeSubTab === "conversas" ? html`
+      <!-- Conversations Header -->
+      <div class="tv-panel-header">
+        <div class="tv-search-bar" style="flex:1;">
+          <span style="font-size:1.1rem;font-weight:600;">Conversas</span>
+        </div>
+        <div class="tv-header-actions">
+          ${conversationsLoading ? html`<span class="tv-saved-badge" style="border-color: rgba(52,152,219,0.3); color: #3498db;">&#10227; Carregando...</span>` : nothing}
+          ${conversationsError ? html`<span class="tv-saved-badge" style="border-color: rgba(239,68,68,0.3); color: #ef4444;" title=${conversationsError}>&#9888; Erro</span>` : nothing}
+          <button class="tv-btn-sm" @click=${handleRefreshConversations}>&#128260; Atualizar</button>
+        </div>
+      </div>
+
+      <!-- Conversations KPI -->
+      <div class="tv-kpi-grid">
+        <div class="tv-kpi">
+          <div class="tv-kpi-icon">&#128172;</div>
+          <div>
+            <div class="tv-kpi-value">${conversations.length}</div>
+            <div class="tv-kpi-label">Total Conversas</div>
+          </div>
+        </div>
+        <div class="tv-kpi">
+          <div class="tv-kpi-icon">&#9989;</div>
+          <div>
+            <div class="tv-kpi-value">${conversations.filter((c) => c.status === "open").length}</div>
+            <div class="tv-kpi-label">Abertas</div>
+          </div>
+        </div>
+        <div class="tv-kpi">
+          <div class="tv-kpi-icon">&#9203;</div>
+          <div>
+            <div class="tv-kpi-value">${conversations.filter((c) => c.status === "pending").length}</div>
+            <div class="tv-kpi-label">Pendentes</div>
+          </div>
+        </div>
+        <div class="tv-kpi">
+          <div class="tv-kpi-icon">&#9989;</div>
+          <div>
+            <div class="tv-kpi-value">${conversations.filter((c) => c.status === "closed").length}</div>
+            <div class="tv-kpi-label">Fechadas</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Conversations List -->
+      ${conversations.length === 0 && !conversationsLoading ? html`
+        <div class="tv-empty">Nenhuma conversa encontrada.</div>
+      ` : nothing}
+
+      <div class="tv-product-grid">
+        ${conversations.map((conv) => html`
+          <div class="tv-product-card ${selectedConversationId === conv.id ? "tv-card-selected" : ""}" @click=${handleSelectConversation(conv.id)}>
+            <div class="tv-product-img" style="
+              display: flex; align-items: center; justify-content: center;
+              font-size: 2.5rem; background: rgba(107, 15, 26, 0.06);
+            ">
+              ${channelIcon(conv.channel)}
+            </div>
+            <div class="tv-product-body">
+              <div class="tv-product-header">
+                <strong>${conv.customer?.name || "Cliente desconhecido"}</strong>
+                <span class="tv-badge tv-badge--category" style="
+                  background: rgba(${conv.status === "open" ? "34,197,94" : conv.status === "pending" ? "245,158,11" : "107,114,128"}, 0.12);
+                  color: ${statusColor(conv.status)};
+                ">${statusLabel(conv.status)}</span>
+              </div>
+              <div class="tv-product-sku">
+                ${channelIcon(conv.channel)} ${conv.channel || "—"}
+                ${conv.customer?.phone ? html` &middot; ${maskPhone(conv.customer.phone)}` : nothing}
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
+                <span style="font-size:0.72rem;color:var(--tv-text-muted)">Criada: ${formatDate(conv.created_at)}</span>
+                <span style="font-size:0.72rem;color:var(--tv-text-muted)">Atualizada: ${timeAgo(conv.updated_at)}</span>
+              </div>
+            </div>
+          </div>
+        `)}
+      </div>
+
+      <!-- Message Thread -->
+      ${selectedConversationId ? html`
+        <div class="tv-panel" style="border-left: 3px solid var(--accent, #6B0F1A); margin-top: 1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;gap:8px;flex-wrap:wrap;">
+            <h3 style="margin:0;font-size:1.1rem;">
+              Mensagens (${conversationMessages.length})
+              ${messagesLoading ? html` <span style="font-size:0.8rem;color:var(--tv-text-muted);">(carregando...)</span>` : nothing}
+            </h3>
+            <!-- L3: Search in messages -->
+            <input type="text" placeholder="Buscar mensagens..."
+              .value=${messageSearchQuery}
+              @input=${(e: Event) => { messageSearchQuery = (e.target as HTMLInputElement).value; triggerUpdate(state); }}
+              style="font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:inherit;max-width:200px;" />
+          </div>
+          ${conversationMessages.length === 0 && !messagesLoading ? html`
+            <div class="tv-empty" style="padding:1rem 0;">Nenhuma mensagem nesta conversa.</div>
+          ` : nothing}
+          <div style="display:flex;flex-direction:column;gap:0.5rem;max-height:400px;overflow-y:auto;padding-right:0.5rem;">
+            ${(() => {
+              // L3: Filter messages by search query
+              let msgs = conversationMessages;
+              if (messageSearchQuery.trim()) {
+                const q = messageSearchQuery.toLowerCase();
+                msgs = msgs.filter((m) => m.content.toLowerCase().includes(q));
+              }
+              // L4: Paginate messages
+              const visibleMsgs = messagesShowAll ? msgs : msgs.slice(0, messagesPageSize);
+              const hasMore = msgs.length > messagesPageSize && !messagesShowAll;
+              return html`
+                ${visibleMsgs.map((msg) => html`
+              <div style="
+                padding: 0.6rem 0.8rem;
+                border-radius: 10px;
+                background: ${msg.role === "assistant"
+                  ? "rgba(107, 15, 26, 0.08)"
+                  : msg.role === "system"
+                    ? "rgba(245, 158, 11, 0.08)"
+                    : "rgba(59, 130, 246, 0.08)"};
+                border: 1px solid ${msg.role === "assistant"
+                  ? "rgba(107, 15, 26, 0.15)"
+                  : msg.role === "system"
+                    ? "rgba(245, 158, 11, 0.15)"
+                    : "rgba(59, 130, 246, 0.15)"};
+                align-self: ${msg.role === "user" ? "flex-end" : "flex-start"};
+                max-width: 80%;
+              ">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem;">
+                  <span style="
+                    font-size: 0.7rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    color: ${msg.role === "assistant" ? "#6B0F1A" : msg.role === "system" ? "#f59e0b" : "#3b82f6"};
+                  ">${msg.role === "assistant" ? "Troy Agent" : msg.role === "system" ? "Sistema" : "Cliente"}</span>
+                  <span style="font-size:0.65rem;color:var(--tv-text-muted);">${formatDateTime(msg.created_at)}</span>
+                </div>
+                <div style="font-size:0.85rem;white-space:pre-wrap;word-break:break-word;">${msg.content}</div>
+              </div>
+            `)}
+                ${hasMore ? html`
+                  <button class="tv-btn-sm" style="align-self:center;margin-top:4px;" @click=${() => { messagesShowAll = true; triggerUpdate(state); }}>
+                    Mostrar todas (${msgs.length - messagesPageSize} restantes)
+                  </button>
+                ` : nothing}
+              `;
+            })()}
+          </div>
+        </div>
+      ` : nothing}
       ` : nothing}
     </div>
   `;

@@ -2,20 +2,26 @@ import { t } from "../i18n/index.ts";
 import type { IconName } from "./icons.js";
 
 export const TAB_GROUPS = [
-  { label: "operacao", tabs: ["vendas", "catalogo", "crm"] },
+  { label: "operacao", tabs: ["comando", "vendas", "catalogo", "crm", "conteudo", "social", "gerador"] },
   {
     label: "control",
     tabs: ["overview", "channels", "instances", "sessions", "usage", "cron"],
   },
-  { label: "agent", tabs: ["agents", "skills", "nodes"] },
+  { label: "agent", tabs: ["agents", "mission-board", "war-room", "skills", "nodes"] },
   { label: "settings", tabs: ["config", "debug", "logs"] },
 ] as const;
 
 export type Tab =
+  | "comando"
   | "vendas"
   | "catalogo"
   | "crm"
+  | "conteudo"
+  | "social"
+  | "gerador"
   | "agents"
+  | "mission-board"
+  | "war-room"
   | "overview"
   | "channels"
   | "instances"
@@ -30,10 +36,16 @@ export type Tab =
   | "logs";
 
 const TAB_PATHS: Record<Tab, string> = {
+  comando: "/comando",
   vendas: "/vendas",
   catalogo: "/catalogo",
   crm: "/crm",
+  conteudo: "/conteudo",
+  social: "/social",
+  gerador: "/gerador",
   agents: "/agents",
+  "mission-board": "/mission-board",
+  "war-room": "/war-room",
   overview: "/overview",
   channels: "/channels",
   instances: "/instances",
@@ -102,7 +114,7 @@ export function tabFromPath(pathname: string, basePath = ""): Tab | null {
     normalized = "/";
   }
   if (normalized === "/") {
-    return "vendas";
+    return "comando";
   }
   return PATH_TO_TAB.get(normalized) ?? null;
 }
@@ -131,14 +143,26 @@ export function inferBasePathFromPathname(pathname: string): string {
 
 export function iconForTab(tab: Tab): IconName {
   switch (tab) {
+    case "comando":
+      return "monitor";
     case "vendas":
       return "barChart";
     case "catalogo":
       return "folder";
     case "crm":
       return "link";
+    case "conteudo":
+      return "fileText";
+    case "social":
+      return "radio";
+    case "gerador":
+      return "zap";
     case "agents":
       return "folder";
+    case "mission-board":
+      return "zap";
+    case "war-room":
+      return "monitor";
     case "chat":
       return "messageSquare";
     case "overview":
